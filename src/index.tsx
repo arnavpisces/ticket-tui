@@ -9,40 +9,16 @@ import { App } from './app.js';
 import { JiraClient } from './api/jira-client.js';
 import { ConfluenceClient } from './api/confluence-client.js';
 
-type MaskedReadline = readline.Interface & {
-  stdoutMuted?: boolean;
-  output: NodeJS.WriteStream;
-};
-
 const GREEN = '\x1b[32m';
 const BOLD_GREEN = '\x1b[1;32m';
 const RED = '\x1b[31m';
 const RESET = '\x1b[0m';
 
-function createReadlineInterface(): MaskedReadline {
-  const rl = readline.createInterface({
+function createReadlineInterface(): readline.Interface {
+  return readline.createInterface({
     input: process.stdin,
     output: process.stdout,
-  }) as MaskedReadline;
-
-  const originalWrite = (rl as any)._writeToOutput?.bind(rl);
-  rl.stdoutMuted = false;
-  (rl as any)._writeToOutput = function writeToOutput(this: MaskedReadline, stringToWrite: string) {
-    if (this.stdoutMuted) {
-      // Keep completed line breaks, but suppress carriage-return redraws and token chars.
-      if (stringToWrite.includes('\n')) {
-        this.output.write(stringToWrite);
-      }
-      return;
-    }
-    if (originalWrite) {
-      originalWrite(stringToWrite);
-      return;
-    }
-    this.output.write(stringToWrite);
-  };
-
-  return rl;
+  });
 }
 
 function prompt(rl: readline.Interface, question: string): Promise<string> {
@@ -53,14 +29,24 @@ function prompt(rl: readline.Interface, question: string): Promise<string> {
   });
 }
 
-function promptHidden(rl: MaskedReadline, question: string): Promise<string> {
+function promptHidden(rl: readline.Interface, question: string): Promise<string> {
   return new Promise((resolve) => {
-    rl.stdoutMuted = false;
-    rl.output.write(question);
-    rl.stdoutMuted = true;
-    rl.question('', (answer) => {
-      rl.stdoutMuted = false;
-      rl.output.write('\n');
+    const anyRl = rl as any;
+    const originalWrite = anyRl._writeToOutput?.bind(rl);
+
+    // Temporarily mute only token character echo while still rendering the prompt label.
+    anyRl._writeToOutput = (stringToWrite: string) => {
+      if (stringToWrite.startsWith(question)) {
+        process.stdout.write(stringToWrite);
+        return;
+      }
+      if (stringToWrite.includes('\n')) {
+        process.stdout.write('\n');
+      }
+    };
+
+    rl.question(question, (answer) => {
+      anyRl._writeToOutput = originalWrite;
       resolve(answer);
     });
   });
