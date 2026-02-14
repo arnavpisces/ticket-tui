@@ -1,13 +1,13 @@
-# ticket-tui
+# sutra
 
-> Jira + Confluence workflows from one keyboard-first terminal UI.
+> A terminal TUI for Jira tickets and Confluence docs.
 
-`ticket-tui` (published package: `ticket-tui`) is an open-source TUI for Atlassian teams who want fewer browser tabs and faster execution loops.
+`sutra` is an open-source terminal TUI for teams who want to work with Jira tickets and Confluence docs without leaving the keyboard.
 
 Repository:
 
-- Issues: https://github.com/arnavpisces/ticket-tui/issues
-- Pull Requests: https://github.com/arnavpisces/ticket-tui/pulls
+- Issues: https://github.com/arnavpisces/sutra/issues
+- Pull Requests: https://github.com/arnavpisces/sutra/pulls
 
 ## Why This Exists (10-second pitch)
 
@@ -60,15 +60,15 @@ Repository:
 ### Global install
 
 ```bash
-npm install -g ticket-tui
-ticket-tui setup
-ticket-tui
+npm install -g sutra
+sutra setup
+sutra
 ```
 
 ### Run from source
 
 ```bash
-cd ticket-tui
+cd sutra
 npm install
 npm run build
 npm start -- setup
@@ -78,9 +78,9 @@ npm start
 ## Core Commands
 
 ```bash
-ticket-tui setup     # configure Jira + Confluence credentials
-ticket-tui           # start the TUI (default command)
-ticket-tui start     # explicit start command
+sutra setup     # configure Jira + Confluence credentials
+sutra           # start the TUI (default command)
+sutra start     # explicit start command
 ```
 
 ## Keyboard Model
@@ -103,11 +103,11 @@ ticket-tui start     # explicit start command
 
 Configuration path:
 
-- `~/.ticket-tui/config.json`
+- `~/.sutra/config.json`
 
 Local cache/bookmarks/recents database:
 
-- `~/.ticket-tui/cache.db`
+- `~/.sutra/cache.db`
 
 Security note:
 

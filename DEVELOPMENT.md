@@ -12,7 +12,7 @@
 ```bash
 # Clone the repository
 git clone <repo-url>
-cd ticket-tui
+cd sutra
 
 # Install dependencies
 npm install
@@ -176,7 +176,7 @@ Since the app runs in the terminal, use file-based logging:
 import * as fs from 'fs';
 
 function log(msg: string) {
-  fs.appendFileSync('/tmp/ticket-tui.log', `${new Date().toISOString()} - ${msg}\n`);
+  fs.appendFileSync('/tmp/sutra.log', `${new Date().toISOString()} - ${msg}\n`);
 }
 
 // Usage
@@ -186,7 +186,7 @@ log(`Fetching issue: ${key}`);
 ### Inspect Configuration
 
 ```bash
-cat ~/.ticket-tui/config.json
+cat ~/.sutra/config.json
 ```
 
 ## Building & Publishing
@@ -201,7 +201,7 @@ npm run build
 npm link
 
 # Then in any directory:
-ticket-tui --version
+sutra --version
 ```
 
 ### Publishing to npm
@@ -217,7 +217,7 @@ npm run build
 npm publish
 
 # Clean up local link if you used npm link
-npm unlink -g ticket-tui
+npm unlink -g sutra
 ```
 
 ## Common Issues
@@ -246,7 +246,7 @@ npm run build
 
 **Solution**: Verify API token and email in config:
 ```bash
-cat ~/.ticket-tui/config.json
+cat ~/.sutra/config.json
 # Run setup again to update
 npm start -- setup
 ```

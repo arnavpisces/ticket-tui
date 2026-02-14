@@ -1,5 +1,5 @@
 blank_issues_enabled: false
 contact_links:
   - name: Security report
-    url: https://github.com/arnavpisces/ticket-tui/security/advisories/new
+    url: https://github.com/arnavpisces/sutra/security/advisories/new
     about: Report a vulnerability privately.

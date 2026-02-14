@@ -1,4 +1,4 @@
-# Contributing to ticket-tui
+# Contributing to sutra
 
 Thanks for contributing.
 

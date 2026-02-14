@@ -1,11 +1,11 @@
 {
-  "name": "ticket-tui",
+  "name": "sutra",
   "version": "1.0.0",
-  "description": "Terminal UI for Jira and Confluence",
+  "description": "Terminal TUI for Jira tickets and Confluence docs",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "ticket-tui": "dist/index.js"
+    "sutra": "dist/index.js"
   },
   "scripts": {
     "dev": "tsx src/index.tsx",

@@ -1,12 +1,30 @@
 import Database from 'better-sqlite3';
 import { homedir } from 'os';
 import { join } from 'path';
-import { mkdirSync } from 'fs';
+import { copyFileSync, existsSync, mkdirSync } from 'fs';
 
-const baseDir = join(homedir(), '.ticket-tui');
+const baseDir = join(homedir(), '.sutra');
+const legacyBaseDir = join(homedir(), '.ticket-tui');
 mkdirSync(baseDir, { recursive: true });
 
 const dbPath = join(baseDir, 'cache.db');
+
+// Migrate local cache/bookmarks/recents from legacy app directory when needed.
+if (!existsSync(dbPath)) {
+  const legacyDbPath = join(legacyBaseDir, 'cache.db');
+  if (existsSync(legacyDbPath)) {
+    copyFileSync(legacyDbPath, dbPath);
+    const sidecars = ['-wal', '-shm'];
+    for (const suffix of sidecars) {
+      const oldSidecar = `${legacyDbPath}${suffix}`;
+      const newSidecar = `${dbPath}${suffix}`;
+      if (existsSync(oldSidecar)) {
+        copyFileSync(oldSidecar, newSidecar);
+      }
+    }
+  }
+}
+
 const db = new Database(dbPath) as any;
 
 // Better concurrency for read-heavy usage

@@ -1,10 +1,10 @@
-# Ticket TUI - Quick Start Guide
+# Sutra - Quick Start Guide
 
 ## 🚀 Get Started in 2 Minutes
 
 ### 1. Build the Project
 ```bash
-cd ticket-tui
+cd sutra
 npm install
 npm run build
 ```
@@ -68,7 +68,7 @@ npm start
 
 ### Reset Configuration
 ```bash
-rm ~/.ticket-tui/config.json
+rm ~/.sutra/config.json
 npm start -- setup
 ```
 
@@ -148,7 +148,7 @@ npm run build
 ## 📝 File Structure Quick Reference
 
 ```
-ticket-tui/
+sutra/
 ├── src/                    # Source code
 │   ├── api/               # API clients
 │   ├── components/        # UI components
@@ -180,7 +180,7 @@ ticket-tui/
 
 ## 🔐 Security Notes
 
-- API tokens stored in `~/.ticket-tui/config.json`
+- API tokens stored in `~/.sutra/config.json`
 - File has restrictive permissions (user-only)
 - Never commit config file to git
 - Consider using keychain in future versions
@@ -196,13 +196,13 @@ npm start
 ### Global Install
 ```bash
 npm link  # Install locally
-ticket-tui  # Run from anywhere
+sutra  # Run from anywhere
 ```
 
 ### npm Registry
 ```bash
 npm publish  # Publish to npm
-npm install -g ticket-tui  # Install globally
+npm install -g sutra  # Install globally
 ```
 
 ---

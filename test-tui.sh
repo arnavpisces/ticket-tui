@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Ticket TUI - Automated Test Script
+# Sutra - Automated Test Script
 # Tests all TUI features using tmux for automated key inputs
 
 set -e
@@ -106,7 +106,7 @@ check_state() {
 # Start
 echo ""
 echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║           Ticket TUI - Test Suite                      ║"
+echo "║           Sutra - Test Suite                      ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
 log "Log file: $LOG_FILE"
@@ -140,7 +140,7 @@ log "JIRA TESTS"
 log "─────────────────────────────────────────────────────────────────"
 
 # Test 1: App starts and shows header
-check_state "App Startup - Header appears" "Ticket TUI"
+check_state "App Startup - Header appears" "Sutra"
 
 # Test 1b: Header shows connection status
 check_state "Header - Connection Status" "connected"
@@ -151,7 +151,7 @@ sleep 0.5
 tmux send-keys -t $SESSION Up
 sleep 0.5
 OUTPUT=$(tmux capture-pane -t $SESSION -p)
-HEADER_COUNT=$(echo "$OUTPUT" | grep -c "Ticket TUI" || echo "0")
+HEADER_COUNT=$(echo "$OUTPUT" | grep -c "Sutra" || echo "0")
 if [ "$HEADER_COUNT" -eq "1" ]; then
     log "${GREEN}✓ PASS${NC}: Header - No Duplication on Arrow Keys"
     ((PASS_COUNT++))

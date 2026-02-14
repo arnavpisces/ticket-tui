@@ -24,7 +24,7 @@ function prompt(rl: readline.Interface, question: string): Promise<string> {
 }
 
 async function setupWizard(force: boolean = false) {
-  console.log('Ticket TUI - Setup Wizard\n');
+  console.log('Sutra - Setup Wizard\n');
 
   const config = ConfigManager.getConfig();
 
@@ -92,7 +92,7 @@ async function setupWizard(force: boolean = false) {
     const confluenceConfig = await setupConfluence();
     ConfigManager.setConfluenceConfig(confluenceConfig);
 
-    console.log('\n✓ Configuration saved to ~/.ticket-tui/config.json');
+    console.log('\n✓ Configuration saved to ~/.sutra/config.json');
   } catch (error) {
     console.error('Setup failed:', error);
     process.exit(1);
@@ -100,8 +100,8 @@ async function setupWizard(force: boolean = false) {
 }
 
 program
-  .name('ticket-tui')
-  .description('Terminal UI for Jira and Confluence')
+  .name('sutra')
+  .description('Terminal TUI for Jira tickets and Confluence docs')
   .version('1.0.0');
 
 program

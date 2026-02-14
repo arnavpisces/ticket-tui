@@ -4,7 +4,7 @@ This document defines what remains open forever and what may become paid later.
 
 ## Principle
 
-`ticket-tui` is open-source-first. We do not gate current local workflows behind a paywall.
+`sutra` is open-source-first. We do not gate current local workflows behind a paywall.
 
 ## OSS Forever (core product)
 

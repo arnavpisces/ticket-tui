@@ -39,7 +39,7 @@ export function App() {
 
       if (!config.jira || !config.confluence) {
         setError(
-          'Configuration incomplete. Run setup: npx ticket-tui setup'
+          'Configuration incomplete. Run setup: npx sutra setup'
         );
         setConnectionStatus('disconnected');
         return;
@@ -138,7 +138,7 @@ export function App() {
   return (
     <Box flexDirection="column" width="100%" height={terminalHeight}>
       <Header
-        title="Ticket TUI"
+        title="Sutra"
         version="1.0.0"
         connectionStatus={connectionStatus}
       />

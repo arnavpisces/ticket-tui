@@ -9,7 +9,7 @@ export interface HeaderProps {
 }
 
 export function Header({
-  title = 'Ticket TUI',
+  title = 'Sutra',
   version = '1.0.0',
   connectionStatus = 'connected',
 }: HeaderProps) {
@@ -32,7 +32,7 @@ export function Header({
     <Box width="100%" justifyContent="space-between">
       <Box>
         <Text backgroundColor={te.accent} color="black" bold>
-          {' '}TICKET TUI{' '}
+          {' '}SUTRA{' '}
         </Text>
         <Text color={te.fg}> v{version}</Text>
       </Box>
