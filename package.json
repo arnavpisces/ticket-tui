@@ -4,6 +4,26 @@
   "description": "Terminal TUI for Jira tickets and Confluence docs",
   "type": "module",
   "main": "dist/index.js",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE",
+    "NOTICE"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/arnavpisces/sutra.git"
+  },
+  "bugs": {
+    "url": "https://github.com/arnavpisces/sutra/issues"
+  },
+  "homepage": "https://github.com/arnavpisces/sutra#readme",
+  "engines": {
+    "node": ">=20"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "bin": {
     "sutra": "dist/index.js"
   },
@@ -11,6 +31,9 @@
     "dev": "tsx src/index.tsx",
     "build": "tsc",
     "start": "node dist/index.js",
+    "prepack": "npm run build",
+    "check:pack": "npm pack --dry-run",
+    "prepublishOnly": "npm run build && npm run check:pack",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [

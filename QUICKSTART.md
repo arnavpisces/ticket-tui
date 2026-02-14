@@ -203,9 +203,15 @@ sutra  # Run from anywhere
 
 ### npm Registry
 ```bash
-npm publish  # Publish to npm
-npm install -g sutra  # Install globally
+npm run check:pack
+npm version patch
+git push --follow-tags
+# GitHub Action publishes from v* tags
 ```
+
+CI safety:
+- Workflows do not run on external pull requests.
+- CI runs only on pushes to `main` (after merge).
 
 ---
 

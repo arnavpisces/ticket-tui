@@ -91,6 +91,24 @@ sutra           # start the TUI (default command)
 sutra start     # explicit start command
 ```
 
+## Production Release
+
+Maintainer flow:
+
+```bash
+npm ci
+npm run build
+npm run check:pack
+npm version patch   # or minor/major
+git push --follow-tags
+```
+
+Automation:
+
+- `.github/workflows/ci.yml` runs on `push` to `main` only (no `pull_request` trigger).
+- `.github/workflows/release.yml` runs on `v*` tags and publishes to npm.
+- Set repository secret `NPM_TOKEN` before creating release tags.
+
 ## Keyboard Model
 
 ### Global
