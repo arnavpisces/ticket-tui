@@ -1,4 +1,4 @@
-# Atlassian TUI - Implementation Summary
+# Ticket TUI - Implementation Summary
 
 ## Overview
 
@@ -16,7 +16,7 @@ Successfully implemented a TypeScript terminal UI application for managing Jira 
 - [x] Configuration management system:
   - Zod schema validation
   - ConfigManager class for loading/saving
-  - Persistent storage in `~/.atlassian-tui/config.json`
+  - Persistent storage in `~/.ticket-tui/config.json`
   - Interactive setup wizard via CLI
 - [x] Base API client:
   - Basic auth header generation (Base64 encoded email:token)
@@ -189,7 +189,7 @@ src/
 **ConfigManager**
 - Singleton pattern with static methods
 - Uses `conf` library for cross-platform config storage
-- Location: `~/.atlassian-tui/config.json`
+- Location: `~/.ticket-tui/config.json`
 - Zod validation for type safety
 - Methods: `getConfig()`, `setJiraConfig()`, `setConfluenceConfig()`, etc.
 
@@ -197,7 +197,7 @@ src/
 - Interactive CLI for first-time setup
 - Prompts for Jira/Confluence URLs, email, API tokens
 - Validates configuration before saving
-- Accessible via `atlassian-tui setup`
+- Accessible via `ticket-tui setup`
 
 ## Technology Stack Details
 
@@ -259,7 +259,7 @@ Base URL: `https://yourcompany.atlassian.net/wiki/rest/api`
 
 ## Configuration Storage
 
-**File Location:** `~/.atlassian-tui/config.json`
+**File Location:** `~/.ticket-tui/config.json`
 
 **Schema:**
 ```json
@@ -304,14 +304,14 @@ Base URL: `https://yourcompany.atlassian.net/wiki/rest/api`
 
 1. **Configuration Setup**
    ```bash
-   atlassian-tui setup
+   ticket-tui setup
    ```
    - Enter valid Jira/Confluence URLs
    - Provide email and API tokens
-   - Verify config saves to ~/.atlassian-tui/config.json
+   - Verify config saves to ~/.ticket-tui/config.json
 
 2. **Jira Viewing**
-   - Start app: `atlassian-tui`
+   - Start app: `ticket-tui`
    - Enter valid ticket key (e.g., PROJ-123)
    - Verify ticket displays with:
      - Key and status
@@ -348,11 +348,11 @@ npm run dev          # Run with tsx (development)
 
 ### Distribution
 - Executable: `dist/index.js` with shebang
-- Bin entry: `atlassian-tui` command
+- Bin entry: `ticket-tui` command
 - Can be published to npm:
   ```bash
   npm publish
-  npm install -g atlassian-opentui
+  npm install -g ticket-tui
   ```
 
 ## Known Limitations
@@ -412,7 +412,7 @@ npm run dev          # Run with tsx (development)
 
 ## Conclusion
 
-The Atlassian TUI application has been successfully implemented with:
+The Ticket TUI application has been successfully implemented with:
 - ✅ Complete project structure and configuration system
 - ✅ Full Jira and Confluence API integration
 - ✅ Professional UI with tab navigation

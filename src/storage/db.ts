@@ -3,7 +3,7 @@ import { homedir } from 'os';
 import { join } from 'path';
 import { mkdirSync } from 'fs';
 
-const baseDir = join(homedir(), '.atlassian-tui');
+const baseDir = join(homedir(), '.ticket-tui');
 mkdirSync(baseDir, { recursive: true });
 
 const dbPath = join(baseDir, 'cache.db');

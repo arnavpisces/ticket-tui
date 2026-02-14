@@ -24,7 +24,7 @@ function prompt(rl: readline.Interface, question: string): Promise<string> {
 }
 
 async function setupWizard(force: boolean = false) {
-  console.log('Atlassian TUI - Setup Wizard\n');
+  console.log('Ticket TUI - Setup Wizard\n');
 
   const config = ConfigManager.getConfig();
 
@@ -92,7 +92,7 @@ async function setupWizard(force: boolean = false) {
     const confluenceConfig = await setupConfluence();
     ConfigManager.setConfluenceConfig(confluenceConfig);
 
-    console.log('\n✓ Configuration saved to ~/.atlassian-tui/config.json');
+    console.log('\n✓ Configuration saved to ~/.ticket-tui/config.json');
   } catch (error) {
     console.error('Setup failed:', error);
     process.exit(1);
@@ -100,7 +100,7 @@ async function setupWizard(force: boolean = false) {
 }
 
 program
-  .name('atlassian-tui')
+  .name('ticket-tui')
   .description('Terminal UI for Jira and Confluence')
   .version('1.0.0');
 

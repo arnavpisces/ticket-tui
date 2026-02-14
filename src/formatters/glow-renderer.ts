@@ -64,7 +64,7 @@ export class GlowRenderer {
 
         // Create temp file for markdown content
         const tmpDir = os.tmpdir();
-        const tmpFile = path.join(tmpDir, `atlassian-tui-${Date.now()}.md`);
+        const tmpFile = path.join(tmpDir, `ticket-tui-${Date.now()}.md`);
 
         try {
             // Write markdown to temp file
@@ -117,7 +117,7 @@ export class GlowRenderer {
         }
 
         const tmpDir = os.tmpdir();
-        const tmpFile = path.join(tmpDir, `atlassian-tui-${Date.now()}.md`);
+        const tmpFile = path.join(tmpDir, `ticket-tui-${Date.now()}.md`);
 
         try {
             fs.writeFileSync(tmpFile, markdown, 'utf-8');

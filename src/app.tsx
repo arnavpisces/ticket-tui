@@ -39,7 +39,7 @@ export function App() {
 
       if (!config.jira || !config.confluence) {
         setError(
-          'Configuration incomplete. Run setup: npx atlassian-tui setup'
+          'Configuration incomplete. Run setup: npx ticket-tui setup'
         );
         setConnectionStatus('disconnected');
         return;
@@ -138,7 +138,7 @@ export function App() {
   return (
     <Box flexDirection="column" width="100%" height={terminalHeight}>
       <Header
-        title="Atlassian TUI"
+        title="Ticket TUI"
         version="1.0.0"
         connectionStatus={connectionStatus}
       />

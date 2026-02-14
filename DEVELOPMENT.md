@@ -12,7 +12,7 @@
 ```bash
 # Clone the repository
 git clone <repo-url>
-cd atlassian-opentui
+cd ticket-tui
 
 # Install dependencies
 npm install
@@ -176,7 +176,7 @@ Since the app runs in the terminal, use file-based logging:
 import * as fs from 'fs';
 
 function log(msg: string) {
-  fs.appendFileSync('/tmp/atlassian-tui.log', `${new Date().toISOString()} - ${msg}\n`);
+  fs.appendFileSync('/tmp/ticket-tui.log', `${new Date().toISOString()} - ${msg}\n`);
 }
 
 // Usage
@@ -186,7 +186,7 @@ log(`Fetching issue: ${key}`);
 ### Inspect Configuration
 
 ```bash
-cat ~/.atlassian-tui/config.json
+cat ~/.ticket-tui/config.json
 ```
 
 ## Building & Publishing
@@ -201,7 +201,7 @@ npm run build
 npm link
 
 # Then in any directory:
-atlassian-tui --version
+ticket-tui --version
 ```
 
 ### Publishing to npm
@@ -217,7 +217,7 @@ npm run build
 npm publish
 
 # Clean up local link if you used npm link
-npm unlink -g atlassian-opentui
+npm unlink -g ticket-tui
 ```
 
 ## Common Issues
@@ -246,7 +246,7 @@ npm run build
 
 **Solution**: Verify API token and email in config:
 ```bash
-cat ~/.atlassian-tui/config.json
+cat ~/.ticket-tui/config.json
 # Run setup again to update
 npm start -- setup
 ```

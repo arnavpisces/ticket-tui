@@ -22,7 +22,7 @@ We will acknowledge receipt, validate the report, and coordinate disclosure and 
 
 This project uses local Atlassian credentials and tokens. Never commit:
 
-- `~/.atlassian-tui/config.json`
+- `~/.ticket-tui/config.json`
 - local database files
 - environment files containing tokens
 

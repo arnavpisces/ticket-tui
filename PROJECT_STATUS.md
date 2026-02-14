@@ -2,7 +2,7 @@
 
 ## ✅ Implementation Complete
 
-The Atlassian TUI application has been successfully implemented according to the provided plan with all major phases completed.
+The Ticket TUI application has been successfully implemented according to the provided plan with all major phases completed.
 
 ## Summary Statistics
 
@@ -202,7 +202,7 @@ Generated in `dist/` directory:
 
 ### Option 1: Test Now
 ```bash
-cd atlassian-opentui
+cd ticket-tui
 npm run build
 npm start -- setup
 npm start
@@ -212,8 +212,8 @@ npm start
 ```bash
 npm publish  # Publish to npm
 npm link     # Install locally
-atlassian-tui setup
-atlassian-tui
+ticket-tui setup
+ticket-tui
 ```
 
 ### Option 3: Add More Features

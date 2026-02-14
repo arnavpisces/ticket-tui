@@ -2,7 +2,7 @@
 
 > Jira + Confluence workflows from one keyboard-first terminal UI.
 
-`ticket-tui` (published package: `atlassian-opentui`) is an open-source TUI for Atlassian teams who want fewer browser tabs and faster execution loops.
+`ticket-tui` (published package: `ticket-tui`) is an open-source TUI for Atlassian teams who want fewer browser tabs and faster execution loops.
 
 Repository:
 
@@ -60,15 +60,15 @@ Repository:
 ### Global install
 
 ```bash
-npm install -g atlassian-opentui
-atlassian-tui setup
-atlassian-tui
+npm install -g ticket-tui
+ticket-tui setup
+ticket-tui
 ```
 
 ### Run from source
 
 ```bash
-cd atlassian-opentui
+cd ticket-tui
 npm install
 npm run build
 npm start -- setup
@@ -78,9 +78,9 @@ npm start
 ## Core Commands
 
 ```bash
-atlassian-tui setup     # configure Jira + Confluence credentials
-atlassian-tui           # start the TUI (default command)
-atlassian-tui start     # explicit start command
+ticket-tui setup     # configure Jira + Confluence credentials
+ticket-tui           # start the TUI (default command)
+ticket-tui start     # explicit start command
 ```
 
 ## Keyboard Model
@@ -103,11 +103,11 @@ atlassian-tui start     # explicit start command
 
 Configuration path:
 
-- `~/.atlassian-tui/config.json`
+- `~/.ticket-tui/config.json`
 
 Local cache/bookmarks/recents database:
 
-- `~/.atlassian-tui/cache.db`
+- `~/.ticket-tui/cache.db`
 
 Security note:
 

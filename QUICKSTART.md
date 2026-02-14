@@ -1,10 +1,10 @@
-# Atlassian TUI - Quick Start Guide
+# Ticket TUI - Quick Start Guide
 
 ## 🚀 Get Started in 2 Minutes
 
 ### 1. Build the Project
 ```bash
-cd atlassian-opentui
+cd ticket-tui
 npm install
 npm run build
 ```
@@ -68,7 +68,7 @@ npm start
 
 ### Reset Configuration
 ```bash
-rm ~/.atlassian-tui/config.json
+rm ~/.ticket-tui/config.json
 npm start -- setup
 ```
 
@@ -148,7 +148,7 @@ npm run build
 ## 📝 File Structure Quick Reference
 
 ```
-atlassian-opentui/
+ticket-tui/
 ├── src/                    # Source code
 │   ├── api/               # API clients
 │   ├── components/        # UI components
@@ -180,7 +180,7 @@ atlassian-opentui/
 
 ## 🔐 Security Notes
 
-- API tokens stored in `~/.atlassian-tui/config.json`
+- API tokens stored in `~/.ticket-tui/config.json`
 - File has restrictive permissions (user-only)
 - Never commit config file to git
 - Consider using keychain in future versions
@@ -196,13 +196,13 @@ npm start
 ### Global Install
 ```bash
 npm link  # Install locally
-atlassian-tui  # Run from anywhere
+ticket-tui  # Run from anywhere
 ```
 
 ### npm Registry
 ```bash
 npm publish  # Publish to npm
-npm install -g atlassian-opentui  # Install globally
+npm install -g ticket-tui  # Install globally
 ```
 
 ---

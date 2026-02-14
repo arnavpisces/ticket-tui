@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Atlassian OpenTUI - Automated Test Script
+# Ticket TUI - Automated Test Script
 # Tests all TUI features using tmux for automated key inputs
 
 set -e
@@ -22,6 +22,9 @@ SESSION="opentui-test"
 
 # Log file
 LOG_FILE="/tmp/tui-test.log"
+
+# Repository root (directory containing this script)
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Function to log messages
 log() {
@@ -103,7 +106,7 @@ check_state() {
 # Start
 echo ""
 echo "╔══════════════════════════════════════════════════════════════╗"
-echo "║           Atlassian OpenTUI - Test Suite                      ║"
+echo "║           Ticket TUI - Test Suite                      ║"
 echo "╚══════════════════════════════════════════════════════════════╝"
 echo ""
 log "Log file: $LOG_FILE"
@@ -116,7 +119,7 @@ cleanup
 
 # Build the project first
 log "Building project..."
-cd /Users/arnavpisces/Desktop/Personal/atlassian-opentui
+cd "$ROOT_DIR"
 if npm run build > /dev/null 2>&1; then
     log "Build successful"
 else
@@ -126,7 +129,7 @@ fi
 
 # Start TUI in tmux with larger terminal size
 log "\nStarting TUI..."
-tmux new-session -d -s $SESSION -x 120 -y 50 -c /Users/arnavpisces/Desktop/Personal/atlassian-opentui 'node dist/index.js start 2>&1'
+tmux new-session -d -s $SESSION -x 120 -y 50 -c "$ROOT_DIR" 'node dist/index.js start 2>&1'
 sleep 6  # Increased wait time for app to fully load
 
 # ============================================
@@ -137,7 +140,7 @@ log "JIRA TESTS"
 log "─────────────────────────────────────────────────────────────────"
 
 # Test 1: App starts and shows header
-check_state "App Startup - Header appears" "Atlassian TUI"
+check_state "App Startup - Header appears" "Ticket TUI"
 
 # Test 1b: Header shows connection status
 check_state "Header - Connection Status" "connected"
@@ -148,7 +151,7 @@ sleep 0.5
 tmux send-keys -t $SESSION Up
 sleep 0.5
 OUTPUT=$(tmux capture-pane -t $SESSION -p)
-HEADER_COUNT=$(echo "$OUTPUT" | grep -c "Atlassian TUI" || echo "0")
+HEADER_COUNT=$(echo "$OUTPUT" | grep -c "Ticket TUI" || echo "0")
 if [ "$HEADER_COUNT" -eq "1" ]; then
     log "${GREEN}✓ PASS${NC}: Header - No Duplication on Arrow Keys"
     ((PASS_COUNT++))

@@ -2,7 +2,7 @@ import Conf from 'conf';
 import { Config, ConfigSchema, JiraConfig, ConfluenceConfig } from './types.js';
 
 const config = new Conf<Config>({
-  projectName: 'atlassian-tui',
+  projectName: 'ticket-tui',
   schema: {
     jira: {
       type: 'object',

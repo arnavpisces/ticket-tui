@@ -1,11 +1,11 @@
 {
-  "name": "atlassian-opentui",
+  "name": "ticket-tui",
   "version": "1.0.0",
   "description": "Terminal UI for Jira and Confluence",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
-    "atlassian-tui": "dist/index.js"
+    "ticket-tui": "dist/index.js"
   },
   "scripts": {
     "dev": "tsx src/index.tsx",
