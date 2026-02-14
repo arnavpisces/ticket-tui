@@ -66,9 +66,9 @@ sutra
 ```
 
 `sutra setup` asks for:
-- site username (for example `arnavpisces`)
+- site username (for example `your-team`)
 - email
-- Atlassian API token
+- Atlassian API token (input is hidden)
 
 Jira and Confluence base URLs are derived automatically.
 Sutra validates both Jira and Confluence credentials before opening control panels.

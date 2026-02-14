@@ -9,11 +9,40 @@ import { App } from './app.js';
 import { JiraClient } from './api/jira-client.js';
 import { ConfluenceClient } from './api/confluence-client.js';
 
-function createReadlineInterface() {
-  return readline.createInterface({
+type MaskedReadline = readline.Interface & {
+  stdoutMuted?: boolean;
+  output: NodeJS.WriteStream;
+};
+
+const GREEN = '\x1b[32m';
+const BOLD_GREEN = '\x1b[1;32m';
+const RED = '\x1b[31m';
+const RESET = '\x1b[0m';
+
+function createReadlineInterface(): MaskedReadline {
+  const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout,
-  });
+  }) as MaskedReadline;
+
+  const originalWrite = (rl as any)._writeToOutput?.bind(rl);
+  rl.stdoutMuted = false;
+  (rl as any)._writeToOutput = function writeToOutput(this: MaskedReadline, stringToWrite: string) {
+    if (this.stdoutMuted) {
+      // Keep line transitions intact while suppressing typed token characters.
+      if (stringToWrite.includes('\n') || stringToWrite.includes('\r')) {
+        this.output.write(stringToWrite);
+      }
+      return;
+    }
+    if (originalWrite) {
+      originalWrite(stringToWrite);
+      return;
+    }
+    this.output.write(stringToWrite);
+  };
+
+  return rl;
 }
 
 function prompt(rl: readline.Interface, question: string): Promise<string> {
@@ -24,7 +53,59 @@ function prompt(rl: readline.Interface, question: string): Promise<string> {
   });
 }
 
-async function setupWizard(force: boolean = false) {
+function promptHidden(rl: MaskedReadline, question: string): Promise<string> {
+  return new Promise((resolve) => {
+    rl.stdoutMuted = false;
+    rl.output.write(question);
+    rl.stdoutMuted = true;
+    rl.question('', (answer) => {
+      rl.stdoutMuted = false;
+      rl.output.write('\n');
+      resolve(answer);
+    });
+  });
+}
+
+function startApp() {
+  // Set stdin to raw mode to handle key presses properly
+  if (process.stdin.setRawMode) {
+    process.stdin.setRawMode(true);
+  }
+  process.stdin.resume();
+
+  // Suppress console output during TUI - it interferes with rendering
+  console.error = () => { };
+  console.log = () => { };
+
+  // Global error handlers to prevent crashes
+  process.on('uncaughtException', () => {
+    // Silently handle - logging would corrupt TUI
+  });
+  process.on('unhandledRejection', () => {
+    // Silently handle - logging would corrupt TUI
+  });
+
+  // Clear screen and move cursor to home position
+  process.stdout.write('\x1B[2J\x1B[H');
+
+  const { unmount, waitUntilExit, clear } = render(<App />, {
+    exitOnCtrlC: false,
+    debug: false,         // Ensure updates replace previous output (not append)
+    patchConsole: true,   // Intercept console.log to not interfere with Ink output
+  });
+
+  process.on('SIGINT', () => {
+    clear();
+    unmount();
+    process.exit(0);
+  });
+
+  waitUntilExit().catch(() => {
+    process.exit(1);
+  });
+}
+
+async function setupWizard(force: boolean = false): Promise<boolean> {
   console.log('Sutra - Setup Wizard\n');
 
   const config = ConfigManager.getConfig();
@@ -32,7 +113,7 @@ async function setupWizard(force: boolean = false) {
   if (config.jira && config.confluence && !force) {
     console.log('Configuration already set up.');
     console.log('Run with --force or -f to reconfigure.\n');
-    return;
+    return true;
   }
 
   const validateApiToken = (token: string): boolean => {
@@ -70,7 +151,7 @@ async function setupWizard(force: boolean = false) {
 
     try {
       while (!isValidSite(site)) {
-        const value = await prompt(rl, 'Site username (e.g., arnavpisces): ');
+        const value = await prompt(rl, 'Site username (e.g., your-team): ');
         site = normalizeSite(value);
         if (!isValidSite(site)) {
           console.log('Invalid site username. Use only letters, numbers, and hyphens.');
@@ -78,9 +159,9 @@ async function setupWizard(force: boolean = false) {
       }
 
       email = (await prompt(rl, 'Email: ')).trim();
-      apiToken = (await prompt(rl, 'API Token: ')).trim();
+      apiToken = (await promptHidden(rl, 'API Token (input hidden): ')).trim();
       while (!validateApiToken(apiToken)) {
-        apiToken = (await prompt(rl, 'API Token (get a new one from the link above): ')).trim();
+        apiToken = (await promptHidden(rl, 'API Token (input hidden): ')).trim();
       }
     } finally {
       rl.close();
@@ -113,12 +194,12 @@ async function setupWizard(force: boolean = false) {
     }
 
     if (validationErrors.length > 0) {
-      console.log('\n✗ Configuration validation failed:');
+      console.log(`\n${RED}✗ Configuration validation failed:${RESET}`);
       for (const issue of validationErrors) {
         console.log(`  - ${issue}`);
       }
       console.log('\nFix credentials and run: sutra setup --force\n');
-      process.exit(1);
+      return false;
     }
 
     ConfigManager.setJiraConfig({
@@ -132,13 +213,15 @@ async function setupWizard(force: boolean = false) {
       apiToken,
     });
 
-    console.log('\n✓ Configuration saved to ~/.sutra/config.json');
-    console.log('✓ Credentials verified with Jira and Confluence.');
-    console.log(`  Jira: ${jiraBaseUrl}`);
-    console.log(`  Confluence: ${confluenceBaseUrl}`);
+    console.log(`\n${BOLD_GREEN}✓✓✓ Setup successful${RESET}`);
+    console.log(`${GREEN}✓ Configuration saved to ~/.sutra/config.json${RESET}`);
+    console.log(`${GREEN}✓ Credentials verified with Jira and Confluence${RESET}`);
+    console.log(`${GREEN}✓ Jira: ${jiraBaseUrl}${RESET}`);
+    console.log(`${GREEN}✓ Confluence: ${confluenceBaseUrl}${RESET}`);
+    return true;
   } catch (error) {
     console.error('Setup failed:', error);
-    process.exit(1);
+    return false;
   }
 }
 
@@ -152,74 +235,24 @@ program
   .description('Configure Jira and Confluence credentials')
   .option('-f, --force', 'Force reconfiguration even if already set up')
   .action(async (options) => {
-    await setupWizard(options.force);
-    process.exit(0);
+    const success = await setupWizard(options.force);
+    if (!success) {
+      process.exit(1);
+    }
+    console.log(`\n${BOLD_GREEN}✓ Launching Sutra control panels...${RESET}`);
+    startApp();
   });
 
 program
   .command('start', { isDefault: false })
   .description('Start the TUI application')
   .action(() => {
-    // Set stdin to raw mode to handle key presses properly
-    if (process.stdin.setRawMode) {
-      process.stdin.setRawMode(true);
-    }
-    process.stdin.resume();
-
-    // Suppress console output during TUI - it interferes with rendering
-    const originalConsoleError = console.error;
-    const originalConsoleLog = console.log;
-    console.error = () => { };
-    console.log = () => { };
-
-    // Global error handlers to prevent crashes
-    process.on('uncaughtException', () => {
-      // Silently handle - logging would corrupt TUI
-    });
-
-    process.on('unhandledRejection', () => {
-      // Silently handle - logging would corrupt TUI
-    });
-
-    // Clear screen and move cursor to home position
-    process.stdout.write('\x1B[2J\x1B[H');
-
-    const { unmount, waitUntilExit, clear } = render(<App />, {
-      exitOnCtrlC: false,
-      debug: false,         // Ensure updates replace previous output (not append)
-      patchConsole: true,   // Intercept console.log to not interfere with Ink output
-    });
-
-    // Handle graceful exit
-    process.on('SIGINT', () => {
-      clear();
-      unmount();
-      process.exit(0);
-    });
-
-    // Keep the process alive
-    waitUntilExit().catch((error) => {
-      console.error('App error:', error);
-      process.exit(1);
-    });
+    startApp();
   });
 
 program.parse(process.argv);
 
 // Default action: start the app
 if (!process.argv.slice(2).length) {
-  // Clear screen and move cursor to home position
-  process.stdout.write('\x1B[2J\x1B[H');
-
-  const { unmount, clear } = render(<App />, {
-    exitOnCtrlC: false,
-    debug: false,         // Ensure updates replace previous output (not append)
-    patchConsole: true,   // Intercept console.log to not interfere with Ink output
-  });
-
-  process.on('SIGINT', () => {
-    clear();
-    unmount();
-    process.exit(0);
-  });
+  startApp();
 }

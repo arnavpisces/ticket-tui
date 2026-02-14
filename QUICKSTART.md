@@ -14,9 +14,9 @@ npm run build
 npm start -- setup
 ```
 Follow the prompts to enter:
-- Site username (e.g., `arnavpisces`)
+- Site username (e.g., `your-team`)
 - Your email
-- API token (get it from https://id.atlassian.com/manage-profile/security/api-tokens)
+- API token (input is hidden; get it from https://id.atlassian.com/manage-profile/security/api-tokens)
 
 Sutra derives Jira and Confluence URLs automatically from your site username.
 It also validates credentials before entering Jira/Confluence control panels.
