@@ -65,6 +65,13 @@ sutra setup
 sutra
 ```
 
+`sutra setup` asks for:
+- site username (for example `arnavpisces`)
+- email
+- Atlassian API token
+
+Jira and Confluence base URLs are derived automatically.
+
 ### Run from source
 
 ```bash

@@ -5,7 +5,6 @@ import { render } from 'ink';
 import { program } from 'commander';
 import readline from 'readline';
 import { ConfigManager } from './config/config-manager.js';
-import { JiraConfig, ConfluenceConfig } from './config/types.js';
 import { App } from './app.js';
 
 function createReadlineInterface() {
@@ -45,54 +44,63 @@ async function setupWizard(force: boolean = false) {
     return true;
   };
 
-  const setupJira = async (): Promise<JiraConfig> => {
-    console.log('\n--- Jira Configuration ---');
+  const normalizeSite = (input: string): string => {
+    const trimmed = input.trim().toLowerCase();
+    if (!trimmed) return '';
+    const withoutProtocol = trimmed.replace(/^https?:\/\//, '');
+    const host = withoutProtocol.split('/')[0];
+    return host.replace(/\.atlassian\.net$/, '');
+  };
+
+  const isValidSite = (site: string): boolean =>
+    /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(site);
+
+  try {
+    console.log('--- Atlassian Cloud Configuration ---');
+    console.log('Sutra will derive Jira and Confluence base URLs from your site username.');
     console.log('Go to: https://id.atlassian.com/manage-profile/security/api-tokens');
     console.log('Click "Create API token" and copy the generated token.\n');
-    console.log('Enter your Jira configuration:');
 
     const rl = createReadlineInterface();
+    let site = '';
+    let email = '';
+    let apiToken = '';
 
     try {
-      const baseUrl = (await prompt(rl, 'Jira Base URL (e.g., https://yourcompany.atlassian.net): ')).trim();
-      const email = (await prompt(rl, 'Email: ')).trim();
-      let apiToken = (await prompt(rl, 'API Token: ')).trim();
+      while (!isValidSite(site)) {
+        const value = await prompt(rl, 'Site username (e.g., arnavpisces): ');
+        site = normalizeSite(value);
+        if (!isValidSite(site)) {
+          console.log('Invalid site username. Use only letters, numbers, and hyphens.');
+        }
+      }
 
+      email = (await prompt(rl, 'Email: ')).trim();
+      apiToken = (await prompt(rl, 'API Token: ')).trim();
       while (!validateApiToken(apiToken)) {
         apiToken = (await prompt(rl, 'API Token (get a new one from the link above): ')).trim();
       }
-
-      return { baseUrl, email, apiToken };
     } finally {
       rl.close();
     }
-  };
 
-  const setupConfluence = async (): Promise<ConfluenceConfig> => {
-    console.log('\n--- Confluence Configuration ---');
-    console.log('Enter your Confluence configuration:');
+    const jiraBaseUrl = `https://${site}.atlassian.net`;
+    const confluenceBaseUrl = `${jiraBaseUrl}/wiki`;
 
-    const rl = createReadlineInterface();
-
-    try {
-      const baseUrl = (await prompt(rl, 'Confluence Base URL (e.g., https://yourcompany.atlassian.net/wiki): ')).trim();
-      const email = (await prompt(rl, 'Email: ')).trim();
-      const apiToken = (await prompt(rl, 'API Token: ')).trim();
-
-      return { baseUrl, email, apiToken };
-    } finally {
-      rl.close();
-    }
-  };
-
-  try {
-    const jiraConfig = await setupJira();
-    ConfigManager.setJiraConfig(jiraConfig);
-
-    const confluenceConfig = await setupConfluence();
-    ConfigManager.setConfluenceConfig(confluenceConfig);
+    ConfigManager.setJiraConfig({
+      baseUrl: jiraBaseUrl,
+      email,
+      apiToken,
+    });
+    ConfigManager.setConfluenceConfig({
+      baseUrl: confluenceBaseUrl,
+      email,
+      apiToken,
+    });
 
     console.log('\n✓ Configuration saved to ~/.sutra/config.json');
+    console.log(`  Jira: ${jiraBaseUrl}`);
+    console.log(`  Confluence: ${confluenceBaseUrl}`);
   } catch (error) {
     console.error('Setup failed:', error);
     process.exit(1);

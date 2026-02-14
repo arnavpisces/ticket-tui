@@ -14,10 +14,11 @@ npm run build
 npm start -- setup
 ```
 Follow the prompts to enter:
-- Jira URL (e.g., `https://company.atlassian.net`)
-- Confluence URL (e.g., `https://company.atlassian.net/wiki`)
+- Site username (e.g., `arnavpisces`)
 - Your email
-- API tokens (get them from https://id.atlassian.com/manage-profile/security/api-tokens)
+- API token (get it from https://id.atlassian.com/manage-profile/security/api-tokens)
+
+Sutra derives Jira and Confluence URLs automatically from your site username.
 
 ### 3. Launch the App
 ```bash
