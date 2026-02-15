@@ -1,63 +1,53 @@
 # sutra
 
-> A terminal TUI for Jira tickets and Confluence docs.
+Keyboard-first terminal TUI for Jira tickets and Confluence docs.  
+Search, browse, edit, comment, and manage attachments without leaving the terminal.  
+Built for day-to-day engineering workflows where speed matters.
 
-`sutra` is an open-source terminal TUI for teams who want to work with Jira tickets and Confluence docs without leaving the keyboard.
+[![npm version](https://img.shields.io/npm/v/@arnavpisces/sutra)](https://www.npmjs.com/package/@arnavpisces/sutra)
+[![license](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](./LICENSE)
 
-Repository:
+## Why This Exists
 
-- Issues: https://github.com/arnavpisces/sutra/issues
-- Pull Requests: https://github.com/arnavpisces/sutra/pulls
+- Jira + Confluence in one fast terminal workflow.
+- Better keyboard ergonomics than constantly context-switching to browser tabs.
+- Local-first state: cache, bookmarks, recents, and config stay on your machine.
 
-## Why This Exists (10-second pitch)
+## Requirements
 
-- Run Jira and Confluence from one app, without leaving terminal.
-- Search, create, edit, comment, and manage attachments with keyboard flows.
-- Keep data local-first: config, cache, bookmarks, and recents live on your machine.
+- Node.js `20+`
+- Atlassian Cloud site + API token
 
-## What Works Today
+## Product Walkthrough
+
+### 1) Browse tickets and open details
+![Browse Jira tickets](https://raw.githubusercontent.com/arnavpisces/sutra/main/docs/media/gifs/jira-browse.gif)
+
+### 2) Search Confluence pages
+![Search Confluence pages](https://raw.githubusercontent.com/arnavpisces/sutra/main/docs/media/gifs/confluence-search.gif)
+
+### 3) View and find inside Confluence pages
+![View Confluence page](https://raw.githubusercontent.com/arnavpisces/sutra/main/docs/media/gifs/confluence-view-find.gif)
+
+## Features
 
 ### Jira
-
-- Browse assigned/reported issues with pagination.
-- Search issues with:
-  - fuzzy query mode
-  - quick filters
-  - custom JQL
-- Open full issue detail views.
-- Create new issues (project + issue type + summary + description).
-- Edit issue title and description.
-- Add and edit comments.
-- Transition issue status.
-- Upload/download attachments.
-- Open issue in browser and copy issue URL/key.
-- Bookmark issues and revisit from recents.
+- Browse tickets with pagination.
+- Search with fuzzy query, quick filters, and JQL.
+- View/edit ticket details, comments, status, and attachments.
 
 ### Confluence
+- Browse recent pages and browse by space.
+- Search pages with CQL-backed queries.
+- View markdown/mdcat rendering, edit pages, labels, comments, and attachments.
 
-- Browse recent pages with pagination.
-- Search pages using CQL-backed query flow.
-- Browse pages by space tree.
-- Open page viewer with markdown + mdcat rendering modes.
-- Edit page content and save back to Confluence storage format.
-- Open external editor (`$EDITOR`/Cursor/VS Code fallback) for long-form edits.
-- View and add comments.
-- View/add/remove labels.
-- View/upload/download/open attachments.
-- Open page in browser and copy page URL.
-- Bookmark pages and revisit from recents.
+### Shared
+- Bookmarks + recent history.
+- External editor integration (`$EDITOR`, Cursor/VS Code fallback).
+- Persistent local cache via SQLite.
+- Open in browser + copy URL shortcuts.
 
-### Core UX + Storage
-
-- Tab-based Jira/Confluence navigation.
-- Global help modal and keyboard-first interaction model.
-- Local persistent cache (SQLite) for faster repeated views.
-- Local persistent bookmarks and recent history.
-- Setup wizard for Jira + Confluence credentials.
-
-## Install And Run (30 seconds)
-
-### Global install
+## Install
 
 ```bash
 npm install -g @arnavpisces/sutra
@@ -65,117 +55,34 @@ sutra setup
 sutra
 ```
 
-`sutra setup` asks for:
-- site username (for example `your-team`)
+Setup asks for:
+- site username (for example `acme-team`)
 - email
-- Atlassian API token (input is hidden)
+- Atlassian API token (hidden input)
 
-Jira and Confluence base URLs are derived automatically.
-Sutra validates both Jira and Confluence credentials before opening control panels.
+Sutra derives Jira/Confluence base URLs and validates credentials before entering control panels.
 
-### Run from source
+## Key Shortcuts
 
-```bash
-cd sutra
-npm install
-npm run build
-npm start -- setup
-npm start
-```
-
-## Core Commands
-
-```bash
-sutra setup     # configure Jira + Confluence credentials
-sutra           # start the TUI (default command)
-sutra start     # explicit start command
-```
-
-## Production Release
-
-Maintainer flow:
-
-```bash
-npm ci
-npm run build
-npm run check:pack
-npm version patch   # or minor/major
-git push --follow-tags
-```
-
-Automation:
-
-- `.github/workflows/ci.yml` runs on `push` to `main` only (no `pull_request` trigger).
-- `.github/workflows/release.yml` runs on `v*` tags and publishes to npm.
-- Set repository secret `NPM_TOKEN` before creating release tags.
-
-## Keyboard Model
-
-### Global
-
-- `Tab`: switch Jira/Confluence tabs
-- `?`: toggle help
-- `Esc`: close overlays / go back
-- `Ctrl+Q` or `Ctrl+C`: quit
-
-### Common in detail views
-
-- `Ctrl+O`: open current item in browser
+- `Tab`: switch Jira/Confluence
+- `/`: search in browse and page views
+- `Esc`: back to previous screen
+- `Ctrl+E`: open external editor (editable views)
+- `Ctrl+O`: open in browser
 - `Ctrl+Y`: copy URL
-- `Ctrl+B`: toggle bookmark
-- `Ctrl+E`: open external editor when editable
-
-## Configuration And Data
-
-Configuration path:
-
-- `~/.sutra/config.json`
-
-Local cache/bookmarks/recents database:
-
-- `~/.sutra/cache.db`
-
-Security note:
-
-- API tokens are stored locally.
-- Treat local config files as secrets and never commit/export them.
-
-## Open Source Strategy
-
-This project is intentionally open-source-first.
-
-- The core single-user CLI experience stays open.
-- No paywall inside current local Jira/Confluence workflows.
-- Product quality and speed come before monetization.
-
-## Future Pro Boundary
-
-The Pro boundary is documented here:
-
-- [`FUTURE_PRO_BOUNDARY.md`](./FUTURE_PRO_BOUNDARY.md)
-
-Short version:
-
-- **OSS forever**: local single-user workflows (all current core features).
-- **Potential Pro (later)**: hosted/team capabilities such as SSO/SAML, shared workspaces, org-level policy, audit logs, and managed cloud sync.
+- `Ctrl+B`: bookmark
 
 ## Contributing
 
-PRs and issues are welcome. Focus areas:
-
-- UX speed and terminal ergonomics
-- reliability across Jira/Confluence API edge cases
-- keyboard flow consistency
-- docs and onboarding quality
-
-Contribution guidelines:
-
-- [`CONTRIBUTING.md`](./CONTRIBUTING.md)
-- [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md)
-- [`SECURITY.md`](./SECURITY.md)
+- Issues: https://github.com/arnavpisces/sutra/issues
+- Pull requests: https://github.com/arnavpisces/sutra/pulls
+- Guidelines: [`CONTRIBUTING.md`](./CONTRIBUTING.md)
+- Code of conduct: [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md)
+- Security: [`SECURITY.md`](./SECURITY.md)
+- Demo tapes: `docs/media/tapes` (render with `vhs docs/media/tapes/<file>.tape`)
 
 ## License
 
-Apache-2.0. See [`LICENSE`](./LICENSE).
+Apache-2.0, © 2026 Arnav Kumar.
 
-Copyright 2026 Arnav Kumar.
+Not affiliated with Atlassian.
