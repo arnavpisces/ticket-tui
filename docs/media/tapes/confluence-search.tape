@@ -1,14 +1,14 @@
-Output ../gifs/confluence-search.gif
+Output docs/media/gifs/confluence-search.gif
 
 Require node
 
 Set Shell "bash"
-Set FontSize 22
-Set Width 1500
-Set Height 900
+Set FontSize 20
+Set Width 1400
+Set Height 840
 Set Theme "catppuccin-mocha"
-Set Padding 24
-Set TypingSpeed 0ms
+Set Padding 20
+Set TypingSpeed 18ms
 Set Framerate 24
 Set WindowBar Colorful
 
@@ -26,9 +26,11 @@ Enter
 Sleep 2s
 Type "software"
 Sleep 3s
+Down
+Sleep 600ms
+Up
+Sleep 700ms
 Enter
-Sleep 4s
-Escape
-Sleep 1s
+Sleep 3s
 Ctrl+C
 Sleep 1s

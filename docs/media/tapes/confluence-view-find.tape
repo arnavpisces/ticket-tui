@@ -1,14 +1,14 @@
-Output ../gifs/confluence-view-find.gif
+Output docs/media/gifs/confluence-view-find.gif
 
 Require node
 
 Set Shell "bash"
-Set FontSize 22
-Set Width 1500
-Set Height 900
+Set FontSize 20
+Set Width 1400
+Set Height 840
 Set Theme "catppuccin-mocha"
-Set Padding 24
-Set TypingSpeed 0ms
+Set Padding 20
+Set TypingSpeed 18ms
 Set Framerate 24
 Set WindowBar Colorful
 
@@ -24,13 +24,17 @@ Enter
 Sleep 4s
 Enter
 Sleep 4s
+PageDown
+Sleep 1s
+PageDown
+Sleep 1s
+PageUp
+Sleep 1s
 Type "/"
 Sleep 500ms
 Type "background"
 Sleep 1s
 Enter
-Sleep 2s
-PageDown
 Sleep 2s
 Ctrl+C
 Sleep 1s

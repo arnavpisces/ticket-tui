@@ -1,4 +1,4 @@
-Output docs/media/gifs/jira-browse.gif
+Output docs/media/gifs/jira-add-comment.gif
 
 Require node
 
@@ -20,27 +20,23 @@ Show
 Sleep 3s
 Enter
 Sleep 4s
-Down
-Sleep 500ms
-Down
-Sleep 600ms
-Up
-Sleep 700ms
 Enter
 Sleep 3s
 Down
-Sleep 600ms
+Sleep 450ms
 Down
-Sleep 600ms
+Sleep 450ms
 Down
-Sleep 600ms
+Sleep 450ms
 Down
-Sleep 600ms
+Sleep 450ms
 Down
 Sleep 700ms
-Up
-Sleep 500ms
-Up
-Sleep 2s
+Enter
+Sleep 1s
+Type "Quick update: this looks good from the terminal workflow."
+Sleep 700ms
+Enter
+Sleep 3s
 Ctrl+C
 Sleep 1s

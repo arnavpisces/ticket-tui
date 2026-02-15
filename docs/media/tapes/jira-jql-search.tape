@@ -1,4 +1,4 @@
-Output docs/media/gifs/jira-browse.gif
+Output docs/media/gifs/jira-jql-search.gif
 
 Require node
 
@@ -18,29 +18,21 @@ Enter
 Show
 
 Sleep 3s
+Down
+Sleep 450ms
+Down
+Sleep 450ms
+Down
+Sleep 650ms
+Enter
+Sleep 2s
+Type "assignee = currentUser() ORDER BY updated DESC"
+Sleep 800ms
 Enter
 Sleep 4s
 Down
-Sleep 500ms
-Down
-Sleep 600ms
-Up
 Sleep 700ms
 Enter
 Sleep 3s
-Down
-Sleep 600ms
-Down
-Sleep 600ms
-Down
-Sleep 600ms
-Down
-Sleep 600ms
-Down
-Sleep 700ms
-Up
-Sleep 500ms
-Up
-Sleep 2s
 Ctrl+C
 Sleep 1s

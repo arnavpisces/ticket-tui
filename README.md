@@ -20,13 +20,19 @@ Built for day-to-day engineering workflows where speed matters.
 
 ## Product Walkthrough
 
-### 1) Browse tickets and open details
+### 1) Browse tickets and inspect ticket sections
 ![Browse Jira tickets](https://raw.githubusercontent.com/arnavpisces/sutra/main/docs/media/gifs/jira-browse.gif)
 
-### 2) Search Confluence pages
+### 2) Add a ticket comment from detail view
+![Add Jira comment](https://raw.githubusercontent.com/arnavpisces/sutra/main/docs/media/gifs/jira-add-comment.gif)
+
+### 3) Run JQL search (`currentUser()` example)
+![JQL search](https://raw.githubusercontent.com/arnavpisces/sutra/main/docs/media/gifs/jira-jql-search.gif)
+
+### 4) Search Confluence pages
 ![Search Confluence pages](https://raw.githubusercontent.com/arnavpisces/sutra/main/docs/media/gifs/confluence-search.gif)
 
-### 3) View and find inside Confluence pages
+### 5) View and find inside Confluence pages
 ![View Confluence page](https://raw.githubusercontent.com/arnavpisces/sutra/main/docs/media/gifs/confluence-view-find.gif)
 
 ## Features
@@ -79,7 +85,6 @@ Sutra derives Jira/Confluence base URLs and validates credentials before enterin
 - Guidelines: [`CONTRIBUTING.md`](./CONTRIBUTING.md)
 - Code of conduct: [`CODE_OF_CONDUCT.md`](./CODE_OF_CONDUCT.md)
 - Security: [`SECURITY.md`](./SECURITY.md)
-- Demo tapes: `docs/media/tapes` (render with `vhs docs/media/tapes/<file>.tape`)
 
 ## License
 
