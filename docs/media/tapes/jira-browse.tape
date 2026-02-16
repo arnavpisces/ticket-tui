@@ -19,6 +19,8 @@ Enter
 Show
 
 Sleep 2200ms
+Up
+Sleep 200ms
 Enter
 Sleep 3200ms
 Enter
