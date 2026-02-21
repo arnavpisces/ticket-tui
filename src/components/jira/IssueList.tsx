@@ -3,6 +3,7 @@ import { Box, Text, useInput, useStdout } from 'ink';
 import SelectInput from 'ink-select-input';
 import { JiraIssue } from '../../api/jira-client.js';
 import { JiraIssueHeader, JiraIssueRow } from './JiraIssueRow.js';
+import { ShortcutHints } from '../common/ShortcutHints.js';
 import { te } from '../../theme/te.js';
 
 export interface IssueListProps {
@@ -48,7 +49,7 @@ export function IssueList({ title, issues, onSelect, onCancel }: IssueListProps)
           <Text dimColor>No issues found.</Text>
         </Box>
         <Box marginTop={1}>
-          <Text dimColor>Escape: Back</Text>
+          <ShortcutHints hints={[{ key: 'Escape', label: 'Back' }]} />
         </Box>
       </Box>
     );
@@ -69,8 +70,12 @@ export function IssueList({ title, issues, onSelect, onCancel }: IssueListProps)
       borderColor={te.info}
       paddingX={1}
     >
-      <Text bold color={te.accentAlt}>{title.toUpperCase()}</Text>
-      <Text color={te.fg}>{`Page ${pageIndex + 1}/${totalPages} | ${issues.length} total`}</Text>
+      <Box>
+        <Text bold color={te.accentAlt}>{title.toUpperCase()}</Text>
+      </Box>
+      <Box>
+        <Text color={te.fg}>{`Page ${pageIndex + 1}/${totalPages} | ${issues.length} total`}</Text>
+      </Box>
       <Box marginTop={1}>
         <JiraIssueHeader />
       </Box>
@@ -83,7 +88,14 @@ export function IssueList({ title, issues, onSelect, onCancel }: IssueListProps)
         />
       </Box>
       <Box marginTop={1}>
-        <Text color={te.muted}>Enter: Select | n or ]: Next Page | p or [: Prev Page | Escape: Back</Text>
+        <ShortcutHints
+          hints={[
+            { key: 'Enter', label: 'Select' },
+            { key: 'n or ]', label: 'Next Page' },
+            { key: 'p or [', label: 'Prev Page' },
+            { key: 'Escape', label: 'Back' },
+          ]}
+        />
       </Box>
     </Box>
   );

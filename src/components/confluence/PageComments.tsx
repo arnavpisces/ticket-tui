@@ -4,6 +4,7 @@ import SelectInput from 'ink-select-input';
 import { ConfluenceClient, ConfluencePage, ConfluenceComment } from '../../api/confluence-client.js';
 import { ConfluenceConverter } from '../../formatters/confluence-converter.js';
 import { openExternalEditor } from '../../utils/external-editor.js';
+import { ShortcutHints } from '../common/ShortcutHints.js';
 import { te } from '../../theme/te.js';
 
 export interface PageCommentsProps {
@@ -112,7 +113,12 @@ export function PageComments({ client, page, onBack }: PageCommentsProps) {
       )}
 
       <Box marginTop={1}>
-        <Text dimColor>Esc: Back | a: Add comment (opens $EDITOR)</Text>
+        <ShortcutHints
+          hints={[
+            { key: 'a', label: 'Add Comment ($EDITOR)' },
+            { key: 'Escape', label: 'Back' },
+          ]}
+        />
       </Box>
     </Box>
   );

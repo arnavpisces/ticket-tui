@@ -12,6 +12,7 @@ import { PageLabels } from './PageLabels.js';
 import { PageAttachments } from './PageAttachments.js';
 import { SavedList } from '../common/SavedList.js';
 import { MenuList } from '../common/MenuList.js';
+import { ShortcutHints } from '../common/ShortcutHints.js';
 import { listBookmarks, removeBookmark } from '../../storage/bookmarks.js';
 import { listRecents } from '../../storage/recents.js';
 import { te } from '../../theme/te.js';
@@ -52,7 +53,7 @@ class ErrorBoundary extends React.Component<
         <Box flexDirection="column">
           <Text color="red">Error: {this.state.error?.message || 'Unknown error'}</Text>
           <Box marginTop={1}>
-            <Text dimColor>Press Escape to go back</Text>
+            <ShortcutHints hints={[{ key: 'Escape', label: 'Back' }]} />
           </Box>
         </Box>
       );
@@ -180,7 +181,12 @@ export function ConfluenceView({ client }: ConfluenceViewProps) {
             isActive={viewMode === 'menu'}
           />
           <Box>
-            <Text color={te.muted}>Enter: Select | Ctrl+Q: Quit</Text>
+            <ShortcutHints
+              hints={[
+                { key: 'Enter', label: 'Select' },
+                { key: 'Ctrl+Q', label: 'Quit' },
+              ]}
+            />
           </Box>
         </Box>
       );
@@ -231,7 +237,9 @@ export function ConfluenceView({ client }: ConfluenceViewProps) {
             {error && (
               <Box flexDirection="column">
                 <Text color="red">Error: {error.message}</Text>
-                <Text dimColor>Press Escape to go back</Text>
+                <Box marginTop={1}>
+                  <ShortcutHints hints={[{ key: 'Escape', label: 'Back' }]} />
+                </Box>
               </Box>
             )}
             {page && (

@@ -2,22 +2,35 @@ name: Release
 
 on:
   # Deliberately no pull_request trigger:
-  # publish happens only from maintainer-created tags.
+  # workflows run only after code is merged/pushed by maintainers.
   push:
-    tags:
-      - "v*"
+    branches:
+      - main
   workflow_dispatch:
+    inputs:
+      release_type:
+        description: "Version bump type"
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
 
 permissions:
   contents: write
 
 jobs:
   publish:
-    if: github.repository == 'arnavpisces/sutra'
+    if: >
+      github.repository == 'arnavpisces/sutra' &&
+      (github.event_name != 'push' || !startsWith(github.event.head_commit.message, 'chore(release):'))
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -32,6 +45,28 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Resolve release type
+        id: release_type
+        run: |
+          RELEASE_TYPE="${{ github.event.inputs.release_type }}"
+          if [ -z "$RELEASE_TYPE" ]; then
+            RELEASE_TYPE="patch"
+          fi
+          echo "value=$RELEASE_TYPE" >> "$GITHUB_OUTPUT"
+
+      - name: Bump version and push tag
+        id: bump
+        run: |
+          npm version "${{ steps.release_type.outputs.value }}" -m "chore(release): %s [skip ci]"
+          TAG_NAME="v$(node -p "require('./package.json').version")"
+          echo "tag=$TAG_NAME" >> "$GITHUB_OUTPUT"
+          git push origin HEAD:main --follow-tags
+
       - name: Publish to npm
         run: npm publish --access public
         env:
@@ -40,4 +75,5 @@ jobs:
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.bump.outputs.tag }}
           generate_release_notes: true

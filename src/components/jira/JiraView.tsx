@@ -10,6 +10,7 @@ import { QuickFilters } from './QuickFilters.js';
 import { JqlSearch } from './JqlSearch.js';
 import { SavedList } from '../common/SavedList.js';
 import { MenuList } from '../common/MenuList.js';
+import { ShortcutHints } from '../common/ShortcutHints.js';
 import { listBookmarks, removeBookmark } from '../../storage/bookmarks.js';
 import { listRecents } from '../../storage/recents.js';
 import { PersistentCache } from '../../storage/cache.js';
@@ -29,6 +30,7 @@ type ViewMode =
 export interface JiraViewProps {
   client: JiraClient;
   baseUrl: string;
+  onJiraDataChanged?: (doneDelta?: number, totalDelta?: number) => void;
 }
 
 const jiraSearchCache = new PersistentCache<any[]>('jira:search', 300);
@@ -59,7 +61,7 @@ class ErrorBoundary extends React.Component<
         <Box flexDirection="column">
           <Text color="red">Error: {this.state.error?.message || 'Unknown error'}</Text>
           <Box marginTop={1}>
-            <Text dimColor>Press Escape to go back</Text>
+            <ShortcutHints hints={[{ key: 'Escape', label: 'Back' }]} />
           </Box>
         </Box>
       );
@@ -69,7 +71,7 @@ class ErrorBoundary extends React.Component<
   }
 }
 
-export function JiraView({ client, baseUrl }: JiraViewProps) {
+export function JiraView({ client, baseUrl, onJiraDataChanged }: JiraViewProps) {
   const [viewMode, setViewMode] = useState<ViewMode>('menu');
   const [selectedKey, setSelectedKey] = useState('');
   const [detailReturnView, setDetailReturnView] = useState<ViewMode>('menu');
@@ -146,9 +148,6 @@ export function JiraView({ client, baseUrl }: JiraViewProps) {
   };
 
   const handleTicketSearch = async (query: string) => {
-    // Server-side search for tickets
-    // If query is empty, maybe return recent? But FuzzySelect won't call this if empty usually (debounce).
-    // If we want recent tickets on empty, we can handle it.
     const normalized = query.trim();
     if (!normalized) return [];
     const cacheKey = normalized.toLowerCase();
@@ -156,9 +155,19 @@ export function JiraView({ client, baseUrl }: JiraViewProps) {
     if (cached) {
       return cached;
     }
-    const jql = `summary ~ "${normalized}*" OR key = "${normalized}" ORDER BY created DESC`;
-    const res = await client.searchIssues(jql, 20);
-    const results = res.issues.map(i => ({
+
+    const escaped = normalized.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+    const primaryJql = `summary ~ "${escaped}*" OR key = "${normalized.toUpperCase()}" ORDER BY created DESC`;
+    let { issues } = await client.searchIssues(primaryJql, 35);
+
+    // If user typed only the numeric part (e.g. "123"), fetch latest issues and match KEY-123.
+    if (issues.length === 0 && /^\d+$/.test(normalized)) {
+      const fallback = await client.searchIssues('created IS NOT EMPTY ORDER BY created DESC', 200);
+      const suffix = `-${normalized}`;
+      issues = fallback.issues.filter(issue => issue.key.toUpperCase().endsWith(suffix.toUpperCase()));
+    }
+
+    const results = issues.slice(0, 35).map(i => ({
       label: `${i.key}: ${i.fields.summary} (${i.fields.status.name})`,
       value: i.key,
       key: i.key
@@ -200,6 +209,7 @@ export function JiraView({ client, baseUrl }: JiraViewProps) {
 
   const handleCreated = (key: string) => {
     invalidateJiraIssueCaches();
+    onJiraDataChanged?.();
     openIssue(key, 'create');
   };
 
@@ -232,6 +242,25 @@ export function JiraView({ client, baseUrl }: JiraViewProps) {
       priority: priorityId ? { id: priorityId } : null,
     });
     invalidateJiraIssueCaches();
+  };
+
+  const handleAssignToMe = async () => {
+    if (!selectedKey) return;
+    const wasAssignedToMe = Boolean(
+      currentAccountId &&
+      issue?.fields.assignee?.accountId &&
+      issue.fields.assignee.accountId === currentAccountId
+    );
+    await client.assignIssueToMe(selectedKey);
+    invalidateJiraIssueCaches();
+    if (wasAssignedToMe) return; // Already mine, no metric change
+    const statusCategoryKey = String((issue?.fields.status as any)?.statusCategory?.key || '').toLowerCase();
+    const statusName = String(issue?.fields.status?.name || '').toLowerCase();
+    const isDone =
+      statusCategoryKey === 'done' ||
+      /(done|complete|completed|closed|resolved)/.test(statusName);
+    // New assignment: total +1, done +1 only if already completed.
+    onJiraDataChanged?.(isDone ? 1 : 0, 1);
   };
 
   // Handle add comment
@@ -269,8 +298,41 @@ export function JiraView({ client, baseUrl }: JiraViewProps) {
   // Handle status transition
   const handleTransition = async (transitionId: string) => {
     if (!selectedKey) return;
+
+    const selectedTransition = transitions.find(t => t.id === transitionId);
+    const isAssignedToMe = Boolean(
+      currentAccountId &&
+      issue?.fields.assignee?.accountId &&
+      issue.fields.assignee.accountId === currentAccountId
+    );
+
     await client.transitionIssue(selectedKey, transitionId);
     invalidateJiraIssueCaches();
+
+    if (!isAssignedToMe || !selectedTransition) {
+      // Not assigned to me or unknown transition — just trigger a re-fetch
+      onJiraDataChanged?.();
+      return;
+    }
+
+    const currentCatKey = String((issue?.fields.status as any)?.statusCategory?.key || '').toLowerCase();
+    const currentName = String(issue?.fields.status?.name || '').toLowerCase();
+    const wasDone = currentCatKey === 'done' || /(done|complete|completed|closed|resolved)/.test(currentName);
+
+    const targetCatKey = String(selectedTransition.to.statusCategory?.key || '').toLowerCase();
+    const targetName = String(selectedTransition.to.name || '').toLowerCase();
+    const willBeDone = targetCatKey === 'done' || /(done|complete|completed|closed|resolved)/.test(targetName);
+
+    if (!wasDone && willBeDone) {
+      // Moving to done: completed count +1
+      onJiraDataChanged?.(1, 0);
+    } else if (wasDone && !willBeDone) {
+      // Moving from done: completed count -1
+      onJiraDataChanged?.(-1, 0);
+    } else {
+      // Same category — just re-fetch
+      onJiraDataChanged?.();
+    }
   };
 
   // Handle keyboard shortcuts (only for non-detail views - detail handles its own escape)
@@ -310,7 +372,12 @@ export function JiraView({ client, baseUrl }: JiraViewProps) {
           isActive={viewMode === 'menu'}
         />
         <Box paddingLeft={2}>
-          <Text color={te.muted}>Enter: Select | Ctrl+Q: Quit</Text>
+          <ShortcutHints
+            hints={[
+              { key: 'Enter', label: 'Select' },
+              { key: 'Ctrl+Q', label: 'Quit' },
+            ]}
+          />
         </Box>
       </Box>
     );
@@ -436,7 +503,9 @@ export function JiraView({ client, baseUrl }: JiraViewProps) {
         {error && (
           <Box flexDirection="column">
             <Text color="red">Error: {error.message}</Text>
-            <Text dimColor>Press Ctrl+B to go back</Text>
+            <Box marginTop={1}>
+              <ShortcutHints hints={[{ key: 'Escape', label: 'Back' }]} />
+            </Box>
           </Box>
         )}
 
@@ -450,6 +519,7 @@ export function JiraView({ client, baseUrl }: JiraViewProps) {
           onSaveTitle={handleSaveTitle}
           onSaveDescription={handleSaveDescription}
           onSavePriority={handleSavePriority}
+          onAssignToMe={handleAssignToMe}
           onAddComment={handleAddComment}
           onUpdateComment={handleUpdateComment}
           onTransition={handleTransition}

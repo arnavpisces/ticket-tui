@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Box, Text, useInput, useStdout, useStdin } from 'ink';
 import { highlightMarkdownLine, highlightCodeLine } from '../../utils/markdown-highlighter.js';
+import { te } from '../../theme/te.js';
 
 export interface EditableTextBoxProps {
     /** The text content to edit */
@@ -681,11 +682,21 @@ export function EditableTextBox({
                         {searchQuery && searchMatches.length === 0 && (
                             <Text color="red"> No matches</Text>
                         )}
-                        <Text dimColor> | Enter: Jump | ↑↓: Navigate | Esc: Cancel</Text>
+                        <Text dimColor> | </Text>
+                        <Text backgroundColor={te.info} color="black"> Enter </Text>
+                        <Text dimColor> Jump | </Text>
+                        <Text backgroundColor={te.info} color="black"> ↑/↓ </Text>
+                        <Text dimColor> Navigate | </Text>
+                        <Text backgroundColor={te.info} color="black"> Esc </Text>
+                        <Text dimColor> Cancel</Text>
                     </Text>
                 ) : (
                     <Text dimColor wrap="truncate">
-                        Ln {cursor.row + 1}, Col {cursor.col + 1} | {totalLines} lines | {scrollPercent}% | {readOnly ? 'Read-only | ' : ''}Ctrl+S: Save | Ctrl+F or /: Find
+                        Ln {cursor.row + 1}, Col {cursor.col + 1} | {totalLines} lines | {scrollPercent}% | {readOnly ? 'Read-only | ' : ''}
+                        <Text backgroundColor={te.info} color="black"> Ctrl+S </Text>
+                        <Text dimColor> Save | </Text>
+                        <Text backgroundColor={te.info} color="black"> Ctrl+F or / </Text>
+                        <Text dimColor> Find</Text>
                     </Text>
                 )}
             </Box>

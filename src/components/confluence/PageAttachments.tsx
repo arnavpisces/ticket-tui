@@ -5,6 +5,7 @@ import SelectInput from 'ink-select-input';
 import { ConfluenceClient, ConfluencePage, ConfluenceAttachment } from '../../api/confluence-client.js';
 import { getDownloadsDir, normalizeDraggedPath } from '../../utils/paths.js';
 import { openInBrowser, resolveUrl } from '../../utils/links.js';
+import { ShortcutHints } from '../common/ShortcutHints.js';
 import { writeFileSync } from 'fs';
 import { join } from 'path';
 import { te } from '../../theme/te.js';
@@ -118,7 +119,12 @@ export function PageAttachments({ client, page, onBack }: PageAttachmentsProps) 
             />
           </Box>
           <Box marginTop={1}>
-            <Text dimColor>Enter: Upload | Esc: Cancel</Text>
+            <ShortcutHints
+              hints={[
+                { key: 'Enter', label: 'Upload' },
+                { key: 'Escape', label: 'Cancel' },
+              ]}
+            />
           </Box>
         </Box>
       ) : attachments.length === 0 ? (
@@ -148,7 +154,14 @@ export function PageAttachments({ client, page, onBack }: PageAttachmentsProps) 
 
       {!uploading && (
         <Box marginTop={1}>
-          <Text dimColor>Esc: Back | u: Upload | d: Download | o: Open</Text>
+          <ShortcutHints
+            hints={[
+              { key: 'u', label: 'Upload' },
+              { key: 'd', label: 'Download' },
+              { key: 'o', label: 'Open' },
+              { key: 'Escape', label: 'Back' },
+            ]}
+          />
         </Box>
       )}
     </Box>

@@ -4,6 +4,7 @@ import TextInput from 'ink-text-input';
 import { JiraClient, JiraIssue } from '../../api/jira-client.js';
 import { PersistentCache } from '../../storage/cache.js';
 import { IssueList } from './IssueList.js';
+import { ShortcutHints } from '../common/ShortcutHints.js';
 import { te } from '../../theme/te.js';
 
 const jqlCache = new PersistentCache<JiraIssue[]>('jira:jql', 300);
@@ -104,7 +105,12 @@ export function JqlSearch({ client, onSelectIssue, onCancel }: JqlSearchProps) {
       {loading && <Text color={te.muted}>Searching...</Text>}
       {error && <Text color={te.danger}>{error}</Text>}
       <Box marginTop={1}>
-        <Text color={te.muted}>Enter: Search | Escape: Back</Text>
+        <ShortcutHints
+          hints={[
+            { key: 'Enter', label: 'Search' },
+            { key: 'Escape', label: 'Back' },
+          ]}
+        />
       </Box>
     </Box>
   );

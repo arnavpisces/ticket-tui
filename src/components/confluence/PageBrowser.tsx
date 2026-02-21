@@ -4,6 +4,7 @@ import TextInput from 'ink-text-input';
 import SelectInput from 'ink-select-input';
 import { ConfluenceClient } from '../../api/confluence-client.js';
 import { PersistentCache } from '../../storage/cache.js';
+import { ShortcutHints } from '../common/ShortcutHints.js';
 import { te } from '../../theme/te.js';
 
 interface SearchItem {
@@ -153,7 +154,14 @@ export function PageBrowser({ client, onPageSelect, onCancel }: PageBrowserProps
       )}
 
       <Box marginTop={1}>
-        <Text color={te.muted}>Enter: Select | Ctrl+N/PageDown: Next Page | Ctrl+P/PageUp: Prev Page | Escape: Back</Text>
+        <ShortcutHints
+          hints={[
+            { key: 'Enter', label: 'Select' },
+            { key: 'Ctrl+N/PageDown', label: 'Next Page' },
+            { key: 'Ctrl+P/PageUp', label: 'Prev Page' },
+            { key: 'Escape', label: 'Back' },
+          ]}
+        />
       </Box>
     </Box>
   );

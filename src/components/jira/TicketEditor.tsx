@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Box, Text } from 'ink';
+import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
+import { ShortcutHints } from '../common/ShortcutHints.js';
 
 export interface TicketEditorProps {
   title: string;
@@ -30,6 +31,16 @@ export function TicketEditor({
       setError(err instanceof Error ? err.message : 'Unknown error');
     }
   };
+
+  useInput((input, key) => {
+    if (key.escape) {
+      onCancel();
+      return;
+    }
+    if (key.ctrl && input === 's') {
+      handleSave();
+    }
+  });
 
   return (
     <Box flexDirection="column" width="100%">
@@ -64,7 +75,12 @@ export function TicketEditor({
       {saving && <Text dimColor>Saving...</Text>}
 
       <Box marginTop={1}>
-        <Text dimColor>Ctrl+S: Save | Esc: Cancel</Text>
+        <ShortcutHints
+          hints={[
+            { key: 'Ctrl+S', label: 'Save' },
+            { key: 'Escape', label: 'Cancel' },
+          ]}
+        />
       </Box>
     </Box>
   );

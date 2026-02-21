@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import { FuzzySelect, FuzzySelectItem } from '../common/FuzzySelect.js';
+import { ShortcutHints } from '../common/ShortcutHints.js';
 import { JiraClient } from '../../api/jira-client.js';
 import { te } from '../../theme/te.js';
 
@@ -11,21 +12,47 @@ interface CreateTicketProps {
     onCreated: (issueKey: string) => void;
 }
 
-type Step = 'project' | 'type' | 'priority' | 'summary' | 'description' | 'creating';
+type Step = 'project' | 'type' | 'parent' | 'priority' | 'summary' | 'description' | 'creating';
+type ParentMode = 'none' | 'epic-optional' | 'issue-required';
+
 const DEFAULT_PRIORITY = '__default__';
 const DEFAULT_PRIORITY_ITEM: FuzzySelectItem = {
     label: 'Use project default priority',
     value: DEFAULT_PRIORITY,
     key: DEFAULT_PRIORITY
 };
+const NO_PARENT = '__no_parent__';
+const NO_PARENT_ITEM: FuzzySelectItem = {
+    label: 'No epic',
+    value: NO_PARENT,
+    key: NO_PARENT
+};
+
+interface IssueTypeOption {
+    id: string;
+    name: string;
+}
+
+function getParentMode(issueTypeName: string): ParentMode {
+    const normalized = issueTypeName.trim().toLowerCase();
+    if (normalized.includes('sub-task') || normalized.includes('subtask')) {
+        return 'issue-required';
+    }
+    if (normalized === 'epic') {
+        return 'none';
+    }
+    return 'epic-optional';
+}
 
 export function CreateTicket({ client, onCancel, onCreated }: CreateTicketProps) {
     const [step, setStep] = useState<Step>('project');
     const [projects, setProjects] = useState<FuzzySelectItem[]>([]);
-    const [selectedProject, setSelectedProject] = useState<any>(null);
+    const [selectedProject, setSelectedProject] = useState<string | null>(null);
 
     const [issueTypes, setIssueTypes] = useState<FuzzySelectItem[]>([]);
-    const [selectedType, setSelectedType] = useState<any>(null);
+    const [selectedType, setSelectedType] = useState<IssueTypeOption | null>(null);
+    const [parentOptions, setParentOptions] = useState<FuzzySelectItem[]>([NO_PARENT_ITEM]);
+    const [selectedParent, setSelectedParent] = useState<string>(NO_PARENT);
     const [priorities, setPriorities] = useState<FuzzySelectItem[]>([DEFAULT_PRIORITY_ITEM]);
     const [selectedPriority, setSelectedPriority] = useState<string>(DEFAULT_PRIORITY);
 
@@ -77,9 +104,10 @@ export function CreateTicket({ client, onCancel, onCreated }: CreateTicketProps)
                     const types = await client.getCreateMeta(selectedProject);
                     setIssueTypes(types.map(t => ({
                         label: t.name,
-                        value: t.id,
+                        value: { id: t.id, name: t.name } satisfies IssueTypeOption,
                         key: t.id
                     })));
+                    setError(null);
                 } catch (err) {
                     setError('Failed to load issue types');
                 }
@@ -88,15 +116,101 @@ export function CreateTicket({ client, onCancel, onCreated }: CreateTicketProps)
         }
     }, [selectedProject, client]);
 
+    useEffect(() => {
+        if (step !== 'parent' || !selectedProject || !selectedType) {
+            return;
+        }
+
+        const parentMode = getParentMode(selectedType.name);
+        const fetchParentOptions = async () => {
+            try {
+                if (parentMode === 'issue-required') {
+                    const parentIssues = await client.searchParentIssues(selectedProject, '', 35);
+                    setParentOptions(
+                        parentIssues.map(issue => ({
+                            label: `${issue.key}: ${issue.fields.summary}`,
+                            value: issue.key,
+                            key: issue.key,
+                        }))
+                    );
+                } else if (parentMode === 'epic-optional') {
+                    const epicIssues = await client.searchEpics(selectedProject, '', 35);
+                    setParentOptions([
+                        NO_PARENT_ITEM,
+                        ...epicIssues.map(issue => ({
+                            label: `${issue.key}: ${issue.fields.summary}`,
+                            value: issue.key,
+                            key: issue.key,
+                        }))
+                    ]);
+                } else {
+                    setParentOptions([NO_PARENT_ITEM]);
+                }
+                setError(null);
+            } catch {
+                if (parentMode === 'issue-required') {
+                    setParentOptions([]);
+                    setError('Failed to load eligible parent issues');
+                } else {
+                    setParentOptions([NO_PARENT_ITEM]);
+                    setError('Failed to load epics');
+                }
+            }
+        };
+
+        fetchParentOptions();
+    }, [step, selectedProject, selectedType, client]);
+
+    const handleParentSearch = async (query: string): Promise<FuzzySelectItem[]> => {
+        if (!selectedProject || !selectedType) {
+            return [];
+        }
+
+        const parentMode = getParentMode(selectedType.name);
+        if (parentMode === 'issue-required') {
+            const parentIssues = await client.searchParentIssues(selectedProject, query, 35);
+            return parentIssues.map(issue => ({
+                label: `${issue.key}: ${issue.fields.summary}`,
+                value: issue.key,
+                key: issue.key
+            }));
+        }
+
+        const epicIssues = await client.searchEpics(selectedProject, query, 35);
+        return [
+            NO_PARENT_ITEM,
+            ...epicIssues.map(issue => ({
+                label: `${issue.key}: ${issue.fields.summary}`,
+                value: issue.key,
+                key: issue.key
+            }))
+        ];
+    };
+
     const handleCreate = async () => {
+        if (!selectedProject || !selectedType) {
+            setError('Project and issue type are required');
+            setStep('type');
+            return;
+        }
+
+        const parentMode = getParentMode(selectedType.name);
+        if (parentMode === 'issue-required' && selectedParent === NO_PARENT) {
+            setError('Sub-task requires a parent issue');
+            setStep('parent');
+            return;
+        }
+
         setStep('creating');
         try {
+            const parentIssueKey = selectedParent !== NO_PARENT ? selectedParent : undefined;
             const issue = await client.createIssue(
                 selectedProject,
-                selectedType,
+                selectedType.id,
                 summary,
                 description,
-                selectedPriority !== DEFAULT_PRIORITY ? selectedPriority : undefined
+                selectedPriority !== DEFAULT_PRIORITY ? selectedPriority : undefined,
+                parentIssueKey
             );
             onCreated(issue.key);
         } catch (err) {
@@ -109,6 +223,14 @@ export function CreateTicket({ client, onCancel, onCreated }: CreateTicketProps)
         if (key.escape) {
             if (step === 'project') onCancel();
             if (step === 'type') setStep('project');
+            if (step === 'parent') setStep('type');
+            if (step === 'priority') {
+                if (selectedType && getParentMode(selectedType.name) !== 'none') {
+                    setStep('parent');
+                } else {
+                    setStep('type');
+                }
+            }
             if (step === 'summary') setStep('priority');
             if (step === 'description') setStep('summary');
         }
@@ -123,7 +245,11 @@ export function CreateTicket({ client, onCancel, onCreated }: CreateTicketProps)
                     items={projects}
                     onSearch={handleProjectSearch}
                     onSelect={(val) => {
+                        setError(null);
                         setSelectedProject(val);
+                        setSelectedType(null);
+                        setSelectedParent(NO_PARENT);
+                        setParentOptions([NO_PARENT_ITEM]);
                         setStep('type');
                     }}
                     onBack={onCancel}
@@ -142,12 +268,58 @@ export function CreateTicket({ client, onCancel, onCreated }: CreateTicketProps)
                     label="Issue Type"
                     items={issueTypes}
                     onSelect={(val) => {
-                        setSelectedType(val);
-                        setStep('priority');
+                        const issueType = val as IssueTypeOption;
+                        setSelectedType(issueType);
+                        const parentMode = getParentMode(issueType.name);
+                        setSelectedParent(NO_PARENT);
+                        if (parentMode === 'issue-required') {
+                            setParentOptions([]);
+                        } else {
+                            setParentOptions([NO_PARENT_ITEM]);
+                        }
+                        if (parentMode === 'none') {
+                            setStep('priority');
+                        } else {
+                            setStep('parent');
+                        }
                     }}
                     onBack={() => setStep('project')}
                     placeholder="Select type..."
                 />
+                {error && <Text color="red">{error}</Text>}
+            </Box>
+        );
+    }
+
+    if (step === 'parent') {
+        const parentMode = selectedType ? getParentMode(selectedType.name) : 'none';
+        const isParentIssueRequired = parentMode === 'issue-required';
+        const title = isParentIssueRequired
+            ? 'Create Ticket: Select Parent Issue'
+            : 'Create Ticket: Select Parent Epic';
+        const label = isParentIssueRequired ? 'Parent Issue' : 'Parent Epic (Optional)';
+        const hint = isParentIssueRequired
+            ? 'Sub-task requires a parent issue. Select one to continue.'
+            : 'Select an epic to link this issue, or choose "No epic" to continue without one.';
+        const placeholder = isParentIssueRequired ? 'Search parent issues...' : 'Search epics...';
+
+        return (
+            <Box flexDirection="column">
+                <Text bold color={te.accentAlt}>{title}</Text>
+                <FuzzySelect
+                    label={label}
+                    items={parentOptions}
+                    onSearch={handleParentSearch}
+                    onSelect={(val) => {
+                        setSelectedParent(val as string);
+                        setStep('priority');
+                    }}
+                    onBack={() => setStep('type')}
+                    placeholder={placeholder}
+                />
+                <Box marginTop={1}>
+                    <Text dimColor>{hint}</Text>
+                </Box>
                 {error && <Text color="red">{error}</Text>}
             </Box>
         );
@@ -164,7 +336,13 @@ export function CreateTicket({ client, onCancel, onCreated }: CreateTicketProps)
                         setSelectedPriority(val);
                         setStep('summary');
                     }}
-                    onBack={() => setStep('type')}
+                    onBack={() => {
+                        if (selectedType && getParentMode(selectedType.name) !== 'none') {
+                            setStep('parent');
+                        } else {
+                            setStep('type');
+                        }
+                    }}
                     placeholder="Select priority..."
                 />
                 {error && <Text color="red">{error}</Text>}
@@ -175,7 +353,7 @@ export function CreateTicket({ client, onCancel, onCreated }: CreateTicketProps)
     if (step === 'summary') {
         return (
             <Box flexDirection="column">
-                <Text bold color={te.accentAlt}>Create Ticket: Summary</Text>
+                <Text bold color={te.accentAlt}>Create Ticket: Title</Text>
                 <Box borderStyle="round" borderColor={te.accent} paddingX={1}>
                     <TextInput
                         value={summary}
@@ -183,11 +361,16 @@ export function CreateTicket({ client, onCancel, onCreated }: CreateTicketProps)
                         onSubmit={() => {
                             if (summary.trim()) setStep('description');
                         }}
-                        placeholder="Enter summary..."
+                        placeholder="Enter title..."
                     />
                 </Box>
                 <Box marginTop={1}>
-                    <Text dimColor>Enter: Next | Escape: Back</Text>
+                    <ShortcutHints
+                        hints={[
+                            { key: 'Enter', label: 'Next' },
+                            { key: 'Escape', label: 'Back' },
+                        ]}
+                    />
                 </Box>
             </Box>
         );
@@ -206,7 +389,12 @@ export function CreateTicket({ client, onCancel, onCreated }: CreateTicketProps)
                     />
                 </Box>
                 <Box marginTop={1}>
-                    <Text dimColor>Enter: Create | Escape: Back</Text>
+                    <ShortcutHints
+                        hints={[
+                            { key: 'Enter', label: 'Create' },
+                            { key: 'Escape', label: 'Back' },
+                        ]}
+                    />
                 </Box>
                 {error && <Text color="red">{error}</Text>}
             </Box>

@@ -8,6 +8,7 @@ import { ConfigManager } from './config/config-manager.js';
 import { App } from './app.js';
 import { JiraClient } from './api/jira-client.js';
 import { ConfluenceClient } from './api/confluence-client.js';
+import { startAutoUpdater } from './utils/auto-updater.js';
 
 const GREEN = '\x1b[32m';
 const BOLD_GREEN = '\x1b[1;32m';
@@ -53,6 +54,8 @@ function promptHidden(rl: readline.Interface, question: string): Promise<string>
 }
 
 function startApp() {
+  const stopAutoUpdater = startAutoUpdater();
+
   // Set stdin to raw mode to handle key presses properly
   if (process.stdin.setRawMode) {
     process.stdin.setRawMode(true);
@@ -81,14 +84,20 @@ function startApp() {
   });
 
   process.on('SIGINT', () => {
+    stopAutoUpdater();
     clear();
     unmount();
     process.exit(0);
   });
 
-  waitUntilExit().catch(() => {
-    process.exit(1);
-  });
+  waitUntilExit()
+    .then(() => {
+      stopAutoUpdater();
+    })
+    .catch(() => {
+      stopAutoUpdater();
+      process.exit(1);
+    });
 }
 
 async function setupWizard(force: boolean = false): Promise<boolean> {
@@ -145,9 +154,9 @@ async function setupWizard(force: boolean = false): Promise<boolean> {
       }
 
       email = (await prompt(rl, 'Email: ')).trim();
-      apiToken = (await promptHidden(rl, 'API Token (input hidden): ')).trim();
+      apiToken = (await promptHidden(rl, 'API Token: ')).trim();
       while (!validateApiToken(apiToken)) {
-        apiToken = (await promptHidden(rl, 'API Token (input hidden): ')).trim();
+        apiToken = (await promptHidden(rl, 'API Token: ')).trim();
       }
     } finally {
       rl.close();

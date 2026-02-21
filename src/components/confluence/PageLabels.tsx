@@ -3,6 +3,7 @@ import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
 import SelectInput from 'ink-select-input';
 import { ConfluenceClient, ConfluencePage, ConfluenceLabel } from '../../api/confluence-client.js';
+import { ShortcutHints } from '../common/ShortcutHints.js';
 import { te } from '../../theme/te.js';
 
 export interface PageLabelsProps {
@@ -105,7 +106,12 @@ export function PageLabels({ client, page, onBack }: PageLabelsProps) {
             />
           </Box>
           <Box marginTop={1}>
-            <Text dimColor>Enter: Add | Esc: Cancel</Text>
+            <ShortcutHints
+              hints={[
+                { key: 'Enter', label: 'Add' },
+                { key: 'Escape', label: 'Cancel' },
+              ]}
+            />
           </Box>
         </Box>
       ) : labels.length === 0 ? (
@@ -131,7 +137,13 @@ export function PageLabels({ client, page, onBack }: PageLabelsProps) {
 
       {!adding && (
         <Box marginTop={1}>
-          <Text dimColor>Esc: Back | a: Add label | d: Delete label</Text>
+          <ShortcutHints
+            hints={[
+              { key: 'a', label: 'Add Label' },
+              { key: 'd', label: 'Delete Label' },
+              { key: 'Escape', label: 'Back' },
+            ]}
+          />
         </Box>
       )}
     </Box>

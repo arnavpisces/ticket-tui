@@ -4,6 +4,7 @@ import TextInput from 'ink-text-input';
 import SelectInput from 'ink-select-input';
 import Fuse from 'fuse.js';
 import { te } from '../../theme/te.js';
+import { ShortcutHints } from './ShortcutHints.js';
 
 export interface FuzzySelectItem {
     label: string;
@@ -136,7 +137,12 @@ export function FuzzySelect({
             )}
 
             <Box marginTop={1}>
-                <Text color={te.muted}>Escape: Back</Text>
+                <ShortcutHints
+                    hints={[
+                        { key: 'Enter', label: 'Select' },
+                        { key: 'Escape', label: 'Back' },
+                    ]}
+                />
             </Box>
         </Box>
     );

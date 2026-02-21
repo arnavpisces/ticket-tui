@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { Box, Text } from 'ink';
+import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
+import { ShortcutHints } from './ShortcutHints.js';
 
 export interface TextEditorProps {
   value: string;
@@ -30,6 +31,13 @@ export function TextEditor({
     onChange(newValue);
   };
 
+  useInput((input, key) => {
+    if (!onCancel) return;
+    if (key.escape || (key.ctrl && input === 'c')) {
+      onCancel();
+    }
+  });
+
   // For now, use single-line input and handle newlines with \n
   return (
     <Box flexDirection="column" width="100%">
@@ -40,9 +48,12 @@ export function TextEditor({
         onSubmit={() => onSubmit?.()}
       />
       {onCancel && (
-        <Text dimColor>
-          Ctrl+C to cancel
-        </Text>
+        <ShortcutHints
+          hints={[
+            { key: 'Ctrl+C', label: 'Cancel' },
+            { key: 'Escape', label: 'Back' },
+          ]}
+        />
       )}
     </Box>
   );

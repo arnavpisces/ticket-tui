@@ -4,6 +4,7 @@ import TextInput from 'ink-text-input';
 import { JiraIssue, JiraTransition, JiraAttachment, JiraPriority } from '../../api/jira-client.js';
 import { AdfConverter } from '../../formatters/adf-converter.js';
 import { SelectableItem } from '../common/SelectableItem.js';
+import { ShortcutHints } from '../common/ShortcutHints.js';
 import { openExternalEditor } from '../../utils/external-editor.js';
 import { buildJiraIssueUrl, copyToClipboard, openInBrowser } from '../../utils/links.js';
 import { getDownloadsDir, normalizeDraggedPath } from '../../utils/paths.js';
@@ -36,6 +37,7 @@ export interface TicketDetailProps {
   onSaveTitle?: (title: string) => Promise<void>;
   onSaveDescription?: (description: string) => Promise<void>;
   onSavePriority?: (priorityId: string) => Promise<void>;
+  onAssignToMe?: () => Promise<void>;
   onAddComment?: (comment: string) => Promise<void>;
   onUpdateComment?: (commentId: string, comment: string) => Promise<void>;
   onTransition?: (transitionId: string) => Promise<void>;
@@ -56,6 +58,7 @@ export function TicketDetail({
   onSaveTitle,
   onSaveDescription,
   onSavePriority,
+  onAssignToMe,
   onAddComment,
   onUpdateComment,
   onTransition,
@@ -84,6 +87,12 @@ export function TicketDetail({
   const [uploadPath, setUploadPath] = useState('');
 
   const description = AdfConverter.adfToMarkdown(issue.fields.description);
+  const parentIssue = issue.fields.parent;
+  const parentKey = parentIssue?.key || '';
+  const parentSummary = parentIssue?.fields?.summary || '';
+  const currentAssignee = issue.fields.assignee?.displayName || 'Unassigned';
+  const currentAssigneeAccountId = issue.fields.assignee?.accountId as string | undefined;
+  const assigneeIsMe = Boolean(currentAccountId && currentAssigneeAccountId === currentAccountId);
   const comments = issue.fields.comment?.comments || [];
   const attachments = issue.fields.attachment || [];
   const terminalRows = stdout?.rows || 24;
@@ -115,10 +124,8 @@ export function TicketDetail({
     currentAccountId && c.author?.accountId === currentAccountId
   );
 
-  // Selectable items: Status, Title, Description, Add Comment, [Edit Comment if exists]
-  const selectableItems = ['status', 'priority', 'title', 'description', 'add-comment'];
-  // add comments + attachments entries
-  selectableItems.splice(4, 0, 'comments', 'attachments');
+  // Selectable items in view mode.
+  const selectableItems = ['status', 'assignee', 'priority', 'title', 'description', 'comments', 'attachments', 'add-comment'];
   if (myComments.length > 0) {
     selectableItems.push('edit-comment');
   }
@@ -344,6 +351,9 @@ export function TicketDetail({
           setError('No priorities available for this Jira project.');
         }
         break;
+      case 'assignee':
+        void handleAssignToMe();
+        break;
       case 'title':
         setEditValue(issue.fields.summary);
         setMode('edit-title');
@@ -404,6 +414,28 @@ export function TicketDetail({
       setMode('view');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Priority update failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleAssignToMe = async () => {
+    if (saving || !onAssignToMe) return;
+    if (assigneeIsMe) {
+      setCopyMessage('✓ Already assigned to you');
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+
+    try {
+      await onAssignToMe();
+      if (onRefresh) await onRefresh();
+      setCopyMessage('✓ Assigned to you');
+      setMode('view');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to assign ticket');
     } finally {
       setSaving(false);
     }
@@ -502,9 +534,13 @@ export function TicketDetail({
         {saving && <Text dimColor>Updating status...</Text>}
 
         <Box marginTop={1}>
-          <Text dimColor>
-            ↑/↓: Navigate | Enter: Apply | Escape: Cancel
-          </Text>
+          <ShortcutHints
+            hints={[
+              { key: '↑/↓', label: 'Navigate' },
+              { key: 'Enter', label: 'Apply' },
+              { key: 'Escape', label: 'Cancel' },
+            ]}
+          />
         </Box>
       </Box>
     );
@@ -537,9 +573,13 @@ export function TicketDetail({
         </Box>
 
         <Box marginTop={1}>
-          <Text dimColor>
-            ↑/↓: Navigate | Enter: Select | Escape: Cancel
-          </Text>
+          <ShortcutHints
+            hints={[
+              { key: '↑/↓', label: 'Navigate' },
+              { key: 'Enter', label: 'Select' },
+              { key: 'Escape', label: 'Cancel' },
+            ]}
+          />
         </Box>
       </Box>
     );
@@ -580,7 +620,13 @@ export function TicketDetail({
         {saving && <Text dimColor>Updating priority...</Text>}
 
         <Box marginTop={1}>
-          <Text dimColor>↑/↓: Navigate | Enter: Apply | Escape: Cancel</Text>
+          <ShortcutHints
+            hints={[
+              { key: '↑/↓', label: 'Navigate' },
+              { key: 'Enter', label: 'Apply' },
+              { key: 'Escape', label: 'Cancel' },
+            ]}
+          />
         </Box>
       </Box>
     );
@@ -620,7 +666,14 @@ export function TicketDetail({
         )}
 
         <Box marginTop={1}>
-          <Text dimColor>↑/↓: Navigate | Enter: Edit | a: Add | Esc: Back</Text>
+          <ShortcutHints
+            hints={[
+              { key: '↑/↓', label: 'Navigate' },
+              { key: 'Enter', label: 'Edit' },
+              { key: 'a', label: 'Add' },
+              { key: 'Escape', label: 'Back' },
+            ]}
+          />
         </Box>
       </Box>
     );
@@ -649,7 +702,14 @@ export function TicketDetail({
         </Box>
 
         <Box marginTop={1}>
-          <Text dimColor>↑/↓: Navigate | d: Download | u: Upload | Esc: Back</Text>
+          <ShortcutHints
+            hints={[
+              { key: '↑/↓', label: 'Navigate' },
+              { key: 'd', label: 'Download' },
+              { key: 'u', label: 'Upload' },
+              { key: 'Escape', label: 'Back' },
+            ]}
+          />
         </Box>
       </Box>
     );
@@ -683,7 +743,12 @@ export function TicketDetail({
           />
         </Box>
         <Box marginTop={1}>
-          <Text dimColor>Enter: Upload | Esc: Cancel</Text>
+          <ShortcutHints
+            hints={[
+              { key: 'Enter', label: 'Upload' },
+              { key: 'Escape', label: 'Cancel' },
+            ]}
+          />
         </Box>
       </Box>
     );
@@ -724,9 +789,13 @@ export function TicketDetail({
         {saving && <Text dimColor>Saving...</Text>}
 
         <Box marginTop={1}>
-          <Text dimColor>
-            Enter: Save | Escape: Cancel
-          </Text>
+          <ShortcutHints
+            hints={[
+              { key: 'Enter', label: 'Save' },
+              { key: 'Ctrl+E', label: '$EDITOR' },
+              { key: 'Escape', label: 'Cancel' },
+            ]}
+          />
         </Box>
       </Box>
     );
@@ -751,11 +820,36 @@ export function TicketDetail({
       </Box>
 
       {/* Selectable: Status */}
+      {parentKey && (
+        <SelectableItem
+          label="PARENT TICKET"
+          content={
+            <Box>
+              <Text color={te.accentAlt}>{parentKey}</Text>
+              {parentSummary ? <Text color={te.fg}> {' - '}{parentSummary}</Text> : null}
+            </Box>
+          }
+          isSelected={false}
+          actionLabel="[LINKED]"
+          compact
+        />
+      )}
+
+      {/* Selectable: Status */}
       <SelectableItem
         label="STATUS"
         content={<Text color={getJiraStatusColor(issue.fields.status?.name)}>{issue.fields.status.name}</Text>}
         isSelected={isSelectedItem('status')}
         actionLabel={transitions.length > 0 ? "[CHANGE]" : "[VIEW]"}
+        compact
+      />
+
+      {/* Selectable: Assignee */}
+      <SelectableItem
+        label="ASSIGNEE"
+        content={<Text color={assigneeIsMe ? te.success : te.fg}>{currentAssignee}{assigneeIsMe ? ' (you)' : ''}</Text>}
+        isSelected={isSelectedItem('assignee')}
+        actionLabel={assigneeIsMe ? "[YOU]" : "[ASSIGN]"}
         compact
       />
 
@@ -833,14 +927,24 @@ export function TicketDetail({
 
       {/* Navigation hint */}
       <Box marginTop={1}>
-        <Text dimColor>
-          ↑/↓: Navigate | Enter: Select | Ctrl+O: Open | Ctrl+Y: Copy URL | Ctrl+B: Bookmark
-        </Text>
+        <ShortcutHints
+          hints={[
+            { key: '↑/↓', label: 'Navigate' },
+            { key: 'Enter', label: 'Select' },
+            { key: 'Ctrl+O', label: 'Open' },
+            { key: 'Ctrl+Y', label: 'Copy URL' },
+            { key: 'Ctrl+B', label: 'Toggle Bookmark' },
+          ]}
+        />
       </Box>
       <Box>
-        <Text dimColor>
-          Ctrl+R: Refresh | Ctrl+U: Copy Key | Escape: Back {bookmarked ? '★' : ''}
-        </Text>
+        <ShortcutHints
+          hints={[
+            { key: 'Ctrl+R', label: 'Refresh' },
+            { key: 'Ctrl+U', label: 'Copy Key' },
+            { key: 'Escape', label: 'Back' },
+          ]}
+        />
       </Box>
     </Box>
   );

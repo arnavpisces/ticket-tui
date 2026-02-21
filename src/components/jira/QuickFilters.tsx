@@ -4,6 +4,7 @@ import SelectInput from 'ink-select-input';
 import { JiraClient, JiraIssue } from '../../api/jira-client.js';
 import { PersistentCache } from '../../storage/cache.js';
 import { IssueList } from './IssueList.js';
+import { ShortcutHints } from '../common/ShortcutHints.js';
 import { te } from '../../theme/te.js';
 
 const quickCache = new PersistentCache<JiraIssue[]>('jira:quick', 300);
@@ -28,6 +29,28 @@ export function QuickFilters({ client, onSelectIssue, onCancel }: QuickFiltersPr
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const fetchAllIssues = async (jql: string): Promise<JiraIssue[]> => {
+    const pageSize = 100;
+    let startAt = 0;
+    let pageGuard = 0;
+    const all: JiraIssue[] = [];
+
+    while (pageGuard < 100) {
+      const res = await client.searchIssues(jql, pageSize, startAt);
+      const pageIssues = Array.isArray(res.issues) ? res.issues : [];
+      if (pageIssues.length === 0) break;
+      all.push(...pageIssues);
+
+      if (typeof res.total === 'number' && all.length >= res.total) break;
+      if (pageIssues.length < pageSize) break;
+
+      startAt += pageIssues.length;
+      pageGuard += 1;
+    }
+
+    return all;
+  };
+
   useInput((_input, key) => {
     if (key.escape && !selectedFilter) {
       onCancel();
@@ -51,9 +74,9 @@ export function QuickFilters({ client, onSelectIssue, onCancel }: QuickFiltersPr
     }
 
     try {
-      const res = await client.searchIssues(filter.jql, 50);
-      setIssues(res.issues);
-      quickCache.set(cacheKey, res.issues);
+      const allIssues = await fetchAllIssues(filter.jql);
+      setIssues(allIssues);
+      quickCache.set(cacheKey, allIssues);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to fetch issues');
     } finally {
@@ -86,14 +109,22 @@ export function QuickFilters({ client, onSelectIssue, onCancel }: QuickFiltersPr
       <Text bold color={te.accentAlt}>QUICK FILTERS</Text>
       <Box marginTop={1}>
         <SelectInput
-          items={filters.map((f) => ({ label: f.label, value: f }))}
-          onSelect={(item: any) => runFilter(item.value)}
+          items={filters.map((f) => ({ key: f.jql, label: f.label, value: f.jql }))}
+          onSelect={(item: any) => {
+            const filter = filters.find((f) => f.jql === item.value) || filters[0];
+            runFilter(filter);
+          }}
         />
       </Box>
       {loading && <Text color={te.muted}>Loading...</Text>}
       {error && <Text color={te.danger}>{error}</Text>}
       <Box marginTop={1}>
-        <Text color={te.muted}>Enter: Select | Escape: Back</Text>
+        <ShortcutHints
+          hints={[
+            { key: 'Enter', label: 'Select' },
+            { key: 'Escape', label: 'Back' },
+          ]}
+        />
       </Box>
     </Box>
   );

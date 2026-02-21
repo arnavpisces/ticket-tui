@@ -4,6 +4,7 @@ import { ConfluencePage } from '../../api/confluence-client.js';
 import { ConfluenceConverter } from '../../formatters/confluence-converter.js';
 import { mdcatRenderer } from '../../formatters/mdcat-renderer.js';
 import { EditableTextBox } from '../common/EditableTextBox.js';
+import { ShortcutHints } from '../common/ShortcutHints.js';
 import { openExternalEditor } from '../../utils/external-editor.js';
 import { resolveUrl, copyToClipboard, openInBrowser } from '../../utils/links.js';
 import { toggleBookmark, isBookmarked } from '../../storage/bookmarks.js';
@@ -221,9 +222,25 @@ export function PageViewer({
 
       <Box marginTop={1}>
         <Text dimColor wrap="truncate">
-          Mode: {viewMode.toUpperCase()}{viewMode === 'mdcat' ? (mdcatNativeAvailable ? ' (native)' : ' (built-in)') : ''} | Ctrl+T: Toggle View | Ctrl+S: Save | Ctrl+E: $EDITOR | Ctrl+M: Comments | Ctrl+L: Labels | Ctrl+A: Attachments | Ctrl+O: Open | Ctrl+Y: Copy | Ctrl+B: Bookmark {bookmarked ? '★' : ''}
+          Mode: {viewMode.toUpperCase()}
+          {viewMode === 'mdcat' ? (mdcatNativeAvailable ? ' (native)' : ' (built-in)') : ''}
+          {bookmarked ? ' | ★ Bookmarked' : ''}
         </Text>
       </Box>
+      <ShortcutHints
+        hints={[
+          { key: 'Ctrl+T', label: 'Toggle View' },
+          { key: 'Ctrl+S', label: 'Save' },
+          { key: 'Ctrl+E', label: '$EDITOR' },
+          { key: 'Ctrl+M', label: 'Comments' },
+          { key: 'Ctrl+L', label: 'Labels' },
+          { key: 'Ctrl+A', label: 'Attachments' },
+          { key: 'Ctrl+O', label: 'Open' },
+          { key: 'Ctrl+Y', label: 'Copy' },
+          { key: 'Ctrl+B', label: 'Bookmark' },
+          { key: 'Escape', label: 'Back' },
+        ]}
+      />
     </Box>
   );
 }

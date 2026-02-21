@@ -4,6 +4,7 @@ import SelectInput from 'ink-select-input';
 import { JiraClient, JiraIssue } from '../../api/jira-client.js';
 import { PersistentCache } from '../../storage/cache.js';
 import { JiraIssueHeader, JiraIssueRow } from './JiraIssueRow.js';
+import { ShortcutHints } from '../common/ShortcutHints.js';
 import { te } from '../../theme/te.js';
 
 // Cache for ticket list (5 minute TTL)
@@ -95,7 +96,9 @@ export function TicketList({ client, onSelectTicket, onCancel }: TicketListProps
     return (
       <Box flexDirection="column">
         <Text color="red">Error: {error}</Text>
-        <Text dimColor>Press Escape to go back</Text>
+        <Box marginTop={1}>
+          <ShortcutHints hints={[{ key: 'Escape', label: 'Back' }]} />
+        </Box>
       </Box>
     );
   }
@@ -115,7 +118,7 @@ export function TicketList({ client, onSelectTicket, onCancel }: TicketListProps
           <Text dimColor>Create a ticket in Jira first, then come back here.</Text>
         </Box>
         <Box marginTop={1}>
-          <Text dimColor>Press Escape to go back</Text>
+          <ShortcutHints hints={[{ key: 'Escape', label: 'Back' }]} />
         </Box>
       </Box>
     );
@@ -145,9 +148,14 @@ export function TicketList({ client, onSelectTicket, onCancel }: TicketListProps
       />
 
       <Box marginTop={1}>
-        <Text color={te.muted}>
-          Enter: Select | n or ]: Next Page | p or [: Prev Page | Escape: Back
-        </Text>
+        <ShortcutHints
+          hints={[
+            { key: 'Enter', label: 'Select' },
+            { key: 'n or ]', label: 'Next Page' },
+            { key: 'p or [', label: 'Prev Page' },
+            { key: 'Escape', label: 'Back' },
+          ]}
+        />
       </Box>
     </Box>
   );

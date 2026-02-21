@@ -8,6 +8,13 @@ export interface JiraIssue {
   fields: {
     summary: string;
     description: any;
+    parent?: {
+      id?: string;
+      key?: string;
+      fields?: {
+        summary?: string;
+      };
+    };
     status: {
       name: string;
       id: string;
@@ -34,6 +41,9 @@ export interface JiraTransition {
   name: string;
   to: {
     name: string;
+    statusCategory?: {
+      key: string;
+    };
   };
 }
 
@@ -65,6 +75,10 @@ export interface JiraAttachment {
   };
 }
 
+function escapeJqlString(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
 export class JiraClient {
   private apiClient: ApiClient;
 
@@ -74,7 +88,7 @@ export class JiraClient {
 
   async getIssue(key: string): Promise<JiraIssue> {
     const expand = 'changelog,changelog.histories';
-    const fields = 'summary,description,status,comment,attachment,issuetype,priority,labels,assignee,reporter,created,updated,duedate';
+    const fields = 'summary,description,parent,status,comment,attachment,issuetype,priority,labels,assignee,reporter,created,updated,duedate';
     return this.apiClient.get<JiraIssue>(
       `/rest/api/3/issue/${key}?expand=${expand}&fields=${fields}`
     );
@@ -100,6 +114,15 @@ export class JiraClient {
     });
   }
 
+  async assignIssueToUser(key: string, accountId: string): Promise<void> {
+    await this.apiClient.put(`/rest/api/3/issue/${key}/assignee`, { accountId });
+  }
+
+  async assignIssueToMe(key: string): Promise<void> {
+    const me = await this.getMyself();
+    await this.assignIssueToUser(key, me.accountId);
+  }
+
   async addComment(key: string, body: any): Promise<void> {
     await this.apiClient.post(`/rest/api/3/issue/${key}/comment`, { body });
   }
@@ -117,6 +140,56 @@ export class JiraClient {
 
   async getMyself(): Promise<{ accountId: string; displayName: string }> {
     return this.apiClient.get('/rest/api/3/myself');
+  }
+
+  async getIssueCount(jql: string): Promise<number> {
+    const encodedJql = encodeURIComponent(jql);
+    const fields = encodeURIComponent('id');
+    const pageSize = 100;
+    let startAt = 0;
+    let counted = 0;
+    let pageGuard = 0;
+
+    // Prefer enhanced search API and count incrementally. This avoids relying on `total`,
+    // which can be omitted in some Jira Cloud responses.
+    while (pageGuard < 100) {
+      try {
+        const page = await this.apiClient.get<any>(
+          `/rest/api/3/search/jql?jql=${encodedJql}&startAt=${startAt}&maxResults=${pageSize}&fields=${fields}`
+        );
+
+        const issues = Array.isArray(page?.issues) ? page.issues : [];
+        const pageCount = issues.length;
+        counted += pageCount;
+
+        const hasNext =
+          page?.isLast === false ||
+          Boolean(page?.nextPageToken) ||
+          (typeof page?.total === 'number' && startAt + pageCount < page.total);
+
+        if (!hasNext || pageCount === 0) {
+          if (typeof page?.total === 'number') {
+            return Math.max(counted, page.total);
+          }
+          return counted;
+        }
+
+        startAt += pageCount;
+        pageGuard += 1;
+      } catch {
+        break;
+      }
+    }
+
+    // Final fallback for tenants where /search/jql is unavailable.
+    try {
+      const legacy = await this.apiClient.get<any>(
+        `/rest/api/3/search?jql=${encodedJql}&maxResults=0&fields=id`
+      );
+      return typeof legacy?.total === 'number' ? legacy.total : counted;
+    } catch {
+      return counted;
+    }
   }
 
   async searchIssues(jql: string, maxResults: number = 50, startAt: number = 0): Promise<JiraSearchResult> {
@@ -214,6 +287,38 @@ export class JiraClient {
     return [];
   }
 
+  async searchEpics(projectKey: string, query: string, maxResults: number = 35): Promise<JiraIssue[]> {
+    const trimmedQuery = query.trim();
+    const clauses = [
+      `project = "${escapeJqlString(projectKey)}"`,
+      'issuetype = Epic',
+    ];
+
+    if (trimmedQuery) {
+      clauses.push(`summary ~ "${escapeJqlString(trimmedQuery)}*"`);
+    }
+
+    const jql = `${clauses.join(' AND ')} ORDER BY updated DESC`;
+    const result = await this.searchIssues(jql, maxResults, 0);
+    return result.issues;
+  }
+
+  async searchParentIssues(projectKey: string, query: string, maxResults: number = 35): Promise<JiraIssue[]> {
+    const trimmedQuery = query.trim();
+    const clauses = [
+      `project = "${escapeJqlString(projectKey)}"`,
+      'parent IS EMPTY',
+    ];
+
+    if (trimmedQuery) {
+      clauses.push(`summary ~ "${escapeJqlString(trimmedQuery)}*"`);
+    }
+
+    const jql = `${clauses.join(' AND ')} ORDER BY updated DESC`;
+    const result = await this.searchIssues(jql, maxResults, 0);
+    return result.issues;
+  }
+
   async getPriorities(): Promise<JiraPriority[]> {
     try {
       const modern = await this.apiClient.get<any>('/rest/api/3/priority/search?maxResults=200');
@@ -242,7 +347,8 @@ export class JiraClient {
     issueTypeId: string,
     summary: string,
     description: string,
-    priorityId?: string
+    priorityId?: string,
+    parentKey?: string
   ): Promise<JiraIssue> {
     const issueFields: any = {
       project: { key: projectKey },
@@ -267,6 +373,10 @@ export class JiraClient {
 
     if (priorityId) {
       issueFields.priority = { id: priorityId };
+    }
+
+    if (parentKey) {
+      issueFields.parent = { key: parentKey };
     }
 
     const body = {

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Box, Text, useInput } from 'ink';
 import SelectInput from 'ink-select-input';
 import { te } from '../../theme/te.js';
+import { ShortcutHints } from './ShortcutHints.js';
 
 export interface SavedListItem {
   id: number | string;
@@ -60,7 +61,9 @@ export function SavedList({
           <Text color={te.muted}>{emptyMessage}</Text>
         </Box>
         <Box marginTop={1}>
-          <Text color={te.muted}>Escape: Back</Text>
+          <ShortcutHints
+            hints={[{ key: 'Escape', label: 'Back' }]}
+          />
         </Box>
       </Box>
     );
@@ -89,9 +92,13 @@ export function SavedList({
         />
       </Box>
       <Box marginTop={1}>
-        <Text color={te.muted}>
-          Enter: Open | {onRemove ? 'd: Remove | ' : ''}Escape: Back
-        </Text>
+        <ShortcutHints
+          hints={[
+            { key: 'Enter', label: 'Open' },
+            ...(onRemove ? [{ key: 'd', label: 'Remove' }] : []),
+            { key: 'Escape', label: 'Back' },
+          ]}
+        />
       </Box>
     </Box>
   );

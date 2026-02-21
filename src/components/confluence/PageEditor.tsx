@@ -3,6 +3,7 @@ import { Box, Text, useInput, useStdout } from 'ink';
 import TextInput from 'ink-text-input';
 import { ConfluencePage } from '../../api/confluence-client.js';
 import { ConfluenceConverter } from '../../formatters/confluence-converter.js';
+import { ShortcutHints } from '../common/ShortcutHints.js';
 import { te } from '../../theme/te.js';
 
 export interface PageEditorProps {
@@ -93,9 +94,12 @@ export function PageEditor({
 
       {/* Footer with shortcuts */}
       <Box marginTop={1}>
-        <Text dimColor>
-          Enter: Save | Escape: Cancel
-        </Text>
+        <ShortcutHints
+          hints={[
+            { key: 'Enter', label: 'Save' },
+            { key: 'Escape', label: 'Cancel' },
+          ]}
+        />
       </Box>
       <Box>
         <Text dimColor color={te.accentAlt}>

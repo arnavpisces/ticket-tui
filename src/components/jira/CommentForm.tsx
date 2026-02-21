@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Box, Text } from 'ink';
+import { Box, Text, useInput } from 'ink';
 import TextInput from 'ink-text-input';
+import { ShortcutHints } from '../common/ShortcutHints.js';
 
 export interface CommentFormProps {
   onSubmit: (comment: string) => Promise<void>;
@@ -31,6 +32,12 @@ export function CommentForm({
     }
   };
 
+  useInput((input, key) => {
+    if (key.escape || (key.ctrl && input === 'c')) {
+      onCancel();
+    }
+  });
+
   return (
     <Box flexDirection="column" width="100%">
       {error && <Text color="red">Error: {error}</Text>}
@@ -49,9 +56,12 @@ export function CommentForm({
       {submitting && <Text dimColor>Posting...</Text>}
 
       <Box marginTop={1}>
-        <Text dimColor>
-          Enter: Submit | Ctrl+C: Cancel
-        </Text>
+        <ShortcutHints
+          hints={[
+            { key: 'Enter', label: 'Submit' },
+            { key: 'Ctrl+C', label: 'Cancel' },
+          ]}
+        />
       </Box>
     </Box>
   );

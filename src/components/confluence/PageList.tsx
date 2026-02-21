@@ -3,6 +3,7 @@ import { Box, Text, useInput } from 'ink';
 import SelectInput from 'ink-select-input';
 import { ConfluenceClient } from '../../api/confluence-client.js';
 import { PersistentCache } from '../../storage/cache.js';
+import { ShortcutHints } from '../common/ShortcutHints.js';
 import { te } from '../../theme/te.js';
 
 // Cache for page list (5 minute TTL)
@@ -108,7 +109,9 @@ export function PageList({ client, onSelectPage, onCancel }: PageListProps) {
     return (
       <Box flexDirection="column">
         <Text color="red">Error: {error}</Text>
-        <Text dimColor>Press any key to go back</Text>
+        <Box marginTop={1}>
+          <ShortcutHints hints={[{ key: 'Escape', label: 'Back' }]} />
+        </Box>
       </Box>
     );
   }
@@ -124,7 +127,15 @@ export function PageList({ client, onSelectPage, onCancel }: PageListProps) {
     return (
       <Box flexDirection="column">
         <Text color="yellow">No pages found on this page.</Text>
-        <Text dimColor>n or ]: Next Page | p or [: Prev Page | Escape: Back</Text>
+        <Box marginTop={1}>
+          <ShortcutHints
+            hints={[
+              { key: 'n or ]', label: 'Next Page' },
+              { key: 'p or [', label: 'Prev Page' },
+              { key: 'Escape', label: 'Back' },
+            ]}
+          />
+        </Box>
       </Box>
     );
   }
@@ -138,7 +149,7 @@ export function PageList({ client, onSelectPage, onCancel }: PageListProps) {
       paddingX={1}
     >
       <Box marginBottom={1}>
-        <Text bold color={te.accentAlt}>RECENT PAGES</Text>
+        <Text bold color={te.accentAlt}>BROWSE PAGES</Text>
         <Text color={te.muted}>{`  Page ${pageIndex + 1}${hasNextPage ? '+' : ''}`}</Text>
       </Box>
 
@@ -149,9 +160,14 @@ export function PageList({ client, onSelectPage, onCancel }: PageListProps) {
       />
 
       <Box marginTop={1}>
-        <Text color={te.muted}>
-          Enter: Select | n or ]: Next Page | p or [: Prev Page | Escape: Back
-        </Text>
+        <ShortcutHints
+          hints={[
+            { key: 'Enter', label: 'Select' },
+            { key: 'n or ]', label: 'Next Page' },
+            { key: 'p or [', label: 'Prev Page' },
+            { key: 'Escape', label: 'Back' },
+          ]}
+        />
       </Box>
     </Box>
   );

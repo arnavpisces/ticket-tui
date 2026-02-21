@@ -6,12 +6,16 @@ export interface HeaderProps {
   title?: string;
   version?: string;
   connectionStatus?: 'connected' | 'disconnected' | 'loading';
+  metricLabel?: string;
+  dateTimeLabel?: string;
 }
 
 export function Header({
   title = 'Sutra',
   version = '1.0.0',
   connectionStatus = 'connected',
+  metricLabel,
+  dateTimeLabel,
 }: HeaderProps) {
   const statusColor =
     connectionStatus === 'connected'
@@ -36,9 +40,25 @@ export function Header({
         </Text>
         <Text color={te.fg}> v{version}</Text>
       </Box>
-      <Text backgroundColor={statusColor} color="black" bold>
-        {' '}{statusIcon} {statusLabel}{' '}
-      </Text>
+      <Box flexDirection="row">
+        {metricLabel && (
+          <Box marginRight={1}>
+            <Text backgroundColor={te.warning} color="black" bold>
+              {' '}{metricLabel}{' '}
+            </Text>
+          </Box>
+        )}
+        {dateTimeLabel && (
+          <Box marginRight={1}>
+            <Text backgroundColor={te.info} color="black" bold>
+              {' '}{dateTimeLabel}{' '}
+            </Text>
+          </Box>
+        )}
+        <Text backgroundColor={statusColor} color="black" bold>
+          {' '}{statusIcon} {statusLabel}{' '}
+        </Text>
+      </Box>
     </Box>
   );
 }
