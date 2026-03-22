@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Text, useInput } from 'ink';
-import TextInput from 'ink-text-input';
+import TextInput from './WordTextInput.js';
 import SelectInput from 'ink-select-input';
 import Fuse from 'fuse.js';
 import { te } from '../../theme/te.js';
@@ -23,6 +23,7 @@ export interface FuzzySelectProps {
     placeholder?: string;
     limit?: number;
     minQueryLength?: number;
+    clearQueryOnSelect?: boolean;
 }
 
 export function FuzzySelect({
@@ -33,7 +34,8 @@ export function FuzzySelect({
     onBack,
     placeholder = 'Type to search...',
     limit = 20,
-    minQueryLength = 1
+    minQueryLength = 1,
+    clearQueryOnSelect = false
 }: FuzzySelectProps) {
     const [query, setQuery] = useState('');
     const [results, setResults] = useState<FuzzySelectItem[]>(items);
@@ -127,6 +129,10 @@ export function FuzzySelect({
                     items={results.slice(0, limit)}
                     onSelect={(item) => {
                         if (item && item.value !== undefined) {
+                            if (clearQueryOnSelect) {
+                                setQuery('');
+                                setResults(items);
+                            }
                             onSelect(item.value);
                         }
                     }}

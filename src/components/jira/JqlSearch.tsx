@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Box, Text, useInput } from 'ink';
-import TextInput from 'ink-text-input';
+import SelectInput from 'ink-select-input';
+import TextInput from '../common/WordTextInput.js';
 import { JiraClient, JiraIssue } from '../../api/jira-client.js';
 import { PersistentCache } from '../../storage/cache.js';
 import { IssueList } from './IssueList.js';
@@ -14,6 +15,33 @@ export interface JqlSearchProps {
   onSelectIssue: (issueKey: string) => void;
   onCancel: () => void;
 }
+
+const jqlTemplates = [
+  {
+    label: 'My open issues',
+    value: 'assignee = currentUser() AND statusCategory != Done ORDER BY updated DESC',
+  },
+  {
+    label: 'Reported by me',
+    value: 'reporter = currentUser() ORDER BY created DESC',
+  },
+  {
+    label: 'Recently updated',
+    value: 'updated >= -7d ORDER BY updated DESC',
+  },
+  {
+    label: 'In progress work',
+    value: 'status in ("To Do", "In Progress") ORDER BY priority DESC, updated DESC',
+  },
+  {
+    label: 'By project key',
+    value: 'project = ITOPS ORDER BY created DESC',
+  },
+  {
+    label: 'Title contains text',
+    value: 'summary ~ "keyword*" ORDER BY updated DESC',
+  },
+];
 
 function toFriendlyJqlError(err: unknown): string {
   const raw = err instanceof Error ? err.message : '';
@@ -38,8 +66,19 @@ export function JqlSearch({ client, onSelectIssue, onCancel }: JqlSearchProps) {
   const [issues, setIssues] = useState<JiraIssue[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [showSyntaxHelp, setShowSyntaxHelp] = useState(false);
 
   useInput((_input, key) => {
+    if (key.ctrl && _input === 'k' && issues === null) {
+      setShowSyntaxHelp((prev) => !prev);
+      return;
+    }
+
+    if (key.escape && showSyntaxHelp) {
+      setShowSyntaxHelp(false);
+      return;
+    }
+
     if (key.escape && issues === null) {
       onCancel();
     } else if (key.escape && issues !== null) {
@@ -100,14 +139,51 @@ export function JqlSearch({ client, onSelectIssue, onCancel }: JqlSearchProps) {
           onChange={setJql}
           onSubmit={runSearch}
           placeholder='e.g. assignee = currentUser() AND statusCategory != Done'
+          focus={!showSyntaxHelp}
         />
       </Box>
       {loading && <Text color={te.muted}>Searching...</Text>}
       {error && <Text color={te.danger}>{error}</Text>}
+      {showSyntaxHelp && (
+        <Box
+          flexDirection="column"
+          marginTop={1}
+          borderStyle="round"
+          borderColor={te.accent}
+          paddingX={1}
+        >
+          <Text bold color={te.accentAlt}>JQL Syntax Helper</Text>
+          <Text color={te.fg}>Examples: project = KEY | assignee = currentUser() | statusCategory != Done</Text>
+          <Text color={te.fg}>Operators: =, !=, IN, NOT IN, ~, !~, AND, OR, ORDER BY</Text>
+          <Box marginTop={1}>
+            <SelectInput
+              items={jqlTemplates.map((template) => ({
+                key: template.value,
+                label: template.label,
+                value: template.value,
+              }))}
+              onSelect={(item: any) => {
+                setJql(String(item.value || ''));
+                setShowSyntaxHelp(false);
+                setError(null);
+              }}
+            />
+          </Box>
+          <Box marginTop={1}>
+            <ShortcutHints
+              hints={[
+                { key: 'Enter', label: 'Use Template' },
+                { key: 'Escape', label: 'Close Help' },
+              ]}
+            />
+          </Box>
+        </Box>
+      )}
       <Box marginTop={1}>
         <ShortcutHints
           hints={[
             { key: 'Enter', label: 'Search' },
+            { key: 'Ctrl+K', label: 'JQL Help' },
             { key: 'Escape', label: 'Back' },
           ]}
         />

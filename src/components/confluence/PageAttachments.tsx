@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
-import TextInput from 'ink-text-input';
+import TextInput from '../common/WordTextInput.js';
 import SelectInput from 'ink-select-input';
 import { ConfluenceClient, ConfluencePage, ConfluenceAttachment } from '../../api/confluence-client.js';
 import { getDownloadsDir, normalizeDraggedPath } from '../../utils/paths.js';

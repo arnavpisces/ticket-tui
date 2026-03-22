@@ -18,6 +18,9 @@ const confSchema = {
       apiToken: { type: 'string' },
     },
   },
+  themeName: {
+    type: 'string',
+  },
 } as const;
 
 const config = new Conf<Config>({
@@ -63,6 +66,15 @@ export class ConfigManager {
   static getConfluenceConfig(): ConfluenceConfig | undefined {
     const cfg = this.getConfig();
     return cfg.confluence;
+  }
+
+  static getThemeName(): string | undefined {
+    const cfg = this.getConfig();
+    return cfg.themeName;
+  }
+
+  static setThemeName(themeName: string): void {
+    config.set('themeName', themeName);
   }
 
   static isConfigured(): boolean {

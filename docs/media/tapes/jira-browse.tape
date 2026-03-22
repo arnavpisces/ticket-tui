@@ -18,24 +18,30 @@ Type "node dist/index.js start"
 Enter
 Show
 
+Sleep 2400ms
+Enter
+Sleep 3000ms
+Enter
 Sleep 2200ms
+Down
+Sleep 260ms
+Down
+Sleep 260ms
+Down
+Sleep 260ms
+Down
+Sleep 260ms
+Down
+Sleep 260ms
+Down
+Sleep 260ms
+Down
+Sleep 260ms
+Down
+Sleep 900ms
 Up
-Sleep 200ms
-Enter
-Sleep 3200ms
-Enter
-Sleep 2500ms
-Down
-Sleep 240ms
-Down
-Sleep 240ms
-Down
-Sleep 240ms
-Down
-Sleep 240ms
-Down
-Sleep 240ms
-Down
-Sleep 1200ms
+Sleep 260ms
+Up
+Sleep 1000ms
 Ctrl+C
 Sleep 700ms

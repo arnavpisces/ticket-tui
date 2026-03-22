@@ -15,6 +15,7 @@ export const ConfluenceConfigSchema = z.object({
 export const ConfigSchema = z.object({
   jira: JiraConfigSchema.optional(),
   confluence: ConfluenceConfigSchema.optional(),
+  themeName: z.string().min(1).optional(),
 });
 
 export type JiraConfig = z.infer<typeof JiraConfigSchema>;

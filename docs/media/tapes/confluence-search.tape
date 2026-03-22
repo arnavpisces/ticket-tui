@@ -18,32 +18,22 @@ Type "node dist/index.js start"
 Enter
 Show
 
-Sleep 2200ms
+Sleep 2400ms
 Tab
-Sleep 360ms
+Sleep 320ms
 Down
-Sleep 260ms
+Sleep 280ms
 Enter
 Sleep 900ms
 Type "project"
-Sleep 1800ms
-Escape
-Sleep 350ms
+Sleep 2200ms
 Enter
 Sleep 2500ms
-Enter
-Sleep 2500ms
-Type "/"
-Sleep 220ms
-Type "decision"
-Sleep 280ms
-Enter
-Sleep 1000ms
 Ctrl+T
-Sleep 520ms
-Type " (edited from confluence workflow demo)"
-Sleep 340ms
+Sleep 700ms
+Type " Walkthrough update from latest UI."
+Sleep 420ms
 Ctrl+S
-Sleep 1900ms
+Sleep 2200ms
 Ctrl+C
 Sleep 700ms

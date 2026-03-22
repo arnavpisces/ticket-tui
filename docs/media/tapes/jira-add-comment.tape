@@ -18,26 +18,30 @@ Type "node dist/index.js start"
 Enter
 Show
 
+Sleep 2400ms
+Enter
+Sleep 3000ms
+Enter
 Sleep 2200ms
-Enter
-Sleep 3200ms
-Enter
-Sleep 2500ms
 Down
-Sleep 240ms
+Sleep 220ms
 Down
-Sleep 240ms
+Sleep 220ms
 Down
-Sleep 240ms
+Sleep 220ms
 Down
-Sleep 300ms
+Sleep 220ms
+Down
+Sleep 220ms
+Down
+Sleep 220ms
+Down
+Sleep 340ms
 Enter
-Sleep 1000ms
-Type "a"
-Sleep 280ms
-Type "Looks good. Updating this from Sutra demo."
-Sleep 450ms
+Sleep 700ms
+Type "Adding a workflow note from Sutra walkthrough."
+Sleep 420ms
 Enter
-Sleep 2300ms
+Sleep 2400ms
 Ctrl+C
 Sleep 700ms

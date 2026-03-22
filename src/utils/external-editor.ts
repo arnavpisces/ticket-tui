@@ -37,6 +37,13 @@ export async function openExternalEditor(
 
     // Determine editor command
     const editor = options.editor || getDefaultEditor();
+    if (!editor) {
+        return {
+            success: false,
+            error: 'No supported GUI editor found. Install Cursor or VS Code and enable the shell command.',
+            modified: false,
+        };
+    }
 
     // Create temp file
     const tempPath = join(tmpdir(), `confluence-edit-${Date.now()}.${extension}`);
@@ -48,6 +55,13 @@ export async function openExternalEditor(
     const canManageStdin = Boolean(stdin && stdin.isTTY && stdin.setRawMode);
     const wasRaw = Boolean(canManageStdin && stdin.isRaw);
     const wasPaused = Boolean(stdin && stdin.isPaused && stdin.isPaused());
+    const flushStdinBuffer = () => {
+        if (!stdin || typeof stdin.read !== 'function') return;
+        let chunk = stdin.read();
+        while (chunk !== null) {
+            chunk = stdin.read();
+        }
+    };
 
     try {
         // Write initial content
@@ -74,9 +88,11 @@ export async function openExternalEditor(
 
         // Restore terminal state after editor closes
         // Re-enable raw mode for Ink and let components re-enable mouse tracking.
+        flushStdinBuffer();
         if (stdin && !wasPaused) {
             stdin.resume();
         }
+        flushStdinBuffer();
         if (canManageStdin && wasRaw) {
             stdin.setRawMode?.(true);
         }
@@ -120,6 +136,7 @@ export async function openExternalEditor(
         if (stdin && !wasPaused) {
             stdin.resume();
         }
+        flushStdinBuffer();
         if (canManageStdin && wasRaw) {
             stdin.setRawMode?.(true);
         }
@@ -150,9 +167,14 @@ function getDefaultEditor(): string {
             return envEditor;
         }
 
-        // For terminal defaults like vim, prefer a GUI editor for Ctrl+E.
+        // For terminal defaults like vim/nano, prefer a GUI editor for Ctrl+E.
         if (preferredGui) {
             return preferredGui;
+        }
+
+        // Explicitly avoid terminal editors for Ctrl+E workflow.
+        if (isTerminalEditor) {
+            return '';
         }
     }
 
@@ -160,8 +182,7 @@ function getDefaultEditor(): string {
         return preferredGui;
     }
 
-    // Last fallback if no GUI editor command is available.
-    return 'nano';
+    return '';
 }
 
 function getCommandName(editor: string): string {

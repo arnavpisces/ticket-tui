@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Text, useInput } from 'ink';
-import TextInput from 'ink-text-input';
+import TextInput from './WordTextInput.js';
 import { ShortcutHints } from './ShortcutHints.js';
 
 export interface TextEditorProps {

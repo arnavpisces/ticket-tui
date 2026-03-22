@@ -8,11 +8,12 @@ import { TabBar } from './components/common/TabBar.js';
 import { Footer } from './components/common/Footer.js';
 import { Spinner } from './components/common/Spinner.js';
 import { HelpModal } from './components/common/HelpModal.js';
+import { ThemeModal } from './components/common/ThemeModal.js';
 import { Toast } from './components/common/Toast.js';
 import { JiraView } from './components/jira/JiraView.js';
 import { ConfluenceView } from './components/confluence/ConfluenceView.js';
-import { subscribeAutoUpdateEvents } from './utils/auto-updater.js';
-import { te } from './theme/te.js';
+import { getRuntimePackageMetadata, subscribeAutoUpdateEvents } from './utils/auto-updater.js';
+import { te, THEME_PRESETS, applyTheme, getActiveThemeId } from './theme/te.js';
 
 type ConnectionStatus = 'connected' | 'disconnected' | 'loading';
 type ToastPayload = {
@@ -21,11 +22,26 @@ type ToastPayload = {
   duration?: number;
 };
 
+const runtimePackageMetadata = getRuntimePackageMetadata();
+const appVersion = runtimePackageMetadata?.version || '0.0.0';
+
 export function App() {
   const { exit } = useApp();
   const { stdout } = useStdout();
+  const initialThemeIdRef = useRef<string | null>(null);
+  if (!initialThemeIdRef.current) {
+    const storedThemeName = ConfigManager.getThemeName();
+    initialThemeIdRef.current = applyTheme(storedThemeName || getActiveThemeId()).id;
+  }
+  const initialThemeId = initialThemeIdRef.current || getActiveThemeId();
+  const initialThemeIndex = Math.max(0, THEME_PRESETS.findIndex((theme) => theme.id === initialThemeId));
+
   const [activeTab, setActiveTab] = useState(0);
   const [now, setNow] = useState(() => new Date());
+  const [activeThemeId, setActiveThemeId] = useState(initialThemeId);
+  const [showThemeModal, setShowThemeModal] = useState(false);
+  const [selectedThemeIndex, setSelectedThemeIndex] = useState(initialThemeIndex);
+  const themeBeforeModalRef = useRef<string>(initialThemeId);
   const [jiraClient, setJiraClient] = useState<JiraClient | null>(null);
   const [confluenceClient, setConfluenceClient] = useState<ConfluenceClient | null>(
     null
@@ -110,6 +126,33 @@ export function App() {
     return () => clearInterval(timer);
   }, []);
 
+  const previewThemeByIndex = useCallback(
+    (index: number) => {
+      const theme = THEME_PRESETS[index];
+      if (!theme) return;
+
+      applyTheme(theme.id);
+      setSelectedThemeIndex(index);
+      setActiveThemeId(theme.id);
+    },
+    []
+  );
+
+  const saveThemeByIndex = useCallback(
+    (index: number) => {
+      const theme = THEME_PRESETS[index];
+      if (!theme) return;
+
+      ConfigManager.setThemeName(theme.id);
+      enqueueToast({
+        type: 'success',
+        message: `Theme switched to ${theme.name}.`,
+        duration: 2200,
+      });
+    },
+    [enqueueToast]
+  );
+
   useEffect(() => {
     const unsubscribe = subscribeAutoUpdateEvents((event) => {
       if (event.type === 'disabled') return;
@@ -150,6 +193,15 @@ export function App() {
         return;
       }
 
+      if (event.type === 'update-installed') {
+        enqueueToast({
+          type: 'success',
+          message: `Auto-update: v${event.latestVersion} downloaded and installed. Restart Sutra to use it.`,
+          duration: 6000,
+        });
+        return;
+      }
+
       if (event.type === 'update-install-failed') {
         enqueueToast({
           type: 'error',
@@ -184,7 +236,7 @@ export function App() {
     const fetchJiraMetric = async () => {
       try {
         const [openCount, totalCount] = await Promise.all([
-          jiraClient.getIssueCount('assignee = currentUser() AND statusCategory = Done'),
+          jiraClient.getIssueCount('assignee = currentUser() AND statusCategory != Done'),
           jiraClient.getIssueCount('assignee = currentUser()'),
         ]);
 
@@ -194,7 +246,11 @@ export function App() {
         setJiraOpenCount(openCount);
         setJiraTotalCount(totalCount);
       } catch {
-        // Keep last known values on error (don't null out)
+        // Ensure header still shows numeric values on repeated failures.
+        if (!cancelled) {
+          setJiraOpenCount((prev) => (prev === null ? 0 : prev));
+          setJiraTotalCount((prev) => (prev === null ? 0 : prev));
+        }
       }
     };
 
@@ -243,8 +299,56 @@ export function App() {
   }, [jiraClient, confluenceClient, connectionStatus, metricsRefreshNonce]);
 
   useInput((input, key) => {
+    if (showThemeModal) {
+      if (key.escape) {
+        const restoreIndex = Math.max(
+          0,
+          THEME_PRESETS.findIndex((theme) => theme.id === themeBeforeModalRef.current)
+        );
+        previewThemeByIndex(restoreIndex);
+        setShowThemeModal(false);
+        return;
+      }
+
+      if (key.upArrow) {
+        const nextIndex = (selectedThemeIndex - 1 + THEME_PRESETS.length) % THEME_PRESETS.length;
+        previewThemeByIndex(nextIndex);
+        return;
+      }
+
+      if (key.downArrow) {
+        const nextIndex = (selectedThemeIndex + 1) % THEME_PRESETS.length;
+        previewThemeByIndex(nextIndex);
+        return;
+      }
+
+      if (key.return) {
+        saveThemeByIndex(selectedThemeIndex);
+        setShowThemeModal(false);
+        return;
+      }
+
+      if (/^[0-9]$/.test(input)) {
+        const index = input === '0' ? 9 : Number.parseInt(input, 10) - 1;
+        if (index >= 0 && index < THEME_PRESETS.length) {
+          previewThemeByIndex(index);
+          saveThemeByIndex(index);
+          setShowThemeModal(false);
+        }
+        return;
+      }
+
+      return;
+    }
+
     if (key.ctrl && (input === 'q' || input === 'c')) {
       exit();
+    } else if (key.ctrl && input === 'g') {
+      setShowHelp(false);
+      const currentIndex = Math.max(0, THEME_PRESETS.findIndex((theme) => theme.id === activeThemeId));
+      themeBeforeModalRef.current = activeThemeId;
+      previewThemeByIndex(currentIndex);
+      setShowThemeModal(true);
     } else if (key.tab && !showHelp) {
       setActiveTab((prev) => (prev + 1) % 2);
     } else if (input === '?') {
@@ -301,6 +405,7 @@ export function App() {
       title: 'General',
       shortcuts: [
         { key: '?', description: 'Toggle help' },
+        { key: 'Ctrl+G', description: 'Theme palette' },
         { key: 'Ctrl+Q', description: 'Quit application' },
       ],
     },
@@ -331,6 +436,7 @@ export function App() {
   const shortcuts = [
     { key: 'Tab', description: 'Switch' },
     { key: '?', description: 'Help' },
+    { key: 'Ctrl+G', description: 'Theme' },
     { key: 'Ctrl+Q', description: 'Quit' },
   ];
 
@@ -345,14 +451,14 @@ export function App() {
   }).format(now);
   const metricLabel =
     activeTab === 0
-      ? `JIRA: YOUR TICKET STATUS ${jiraOpenCount ?? '--'}/${jiraTotalCount ?? '--'}`
+      ? `JIRA: YOUR OPEN TICKETS ${jiraOpenCount ?? '--'}/${jiraTotalCount ?? '--'}`
       : `MY DOCS ${myConfluenceDocs ?? '--'}`;
 
   return (
     <Box flexDirection="column" width="100%" height={terminalHeight}>
       <Header
         title="Sutra"
-        version="1.0.0"
+        version={appVersion}
         connectionStatus={connectionStatus}
         metricLabel={metricLabel}
         dateTimeLabel={dateTimeLabel}
@@ -377,6 +483,13 @@ export function App() {
           visible={showHelp}
           sections={helpSections}
           onClose={() => setShowHelp(false)}
+        />
+      ) : showThemeModal ? (
+        <ThemeModal
+          visible={showThemeModal}
+          themes={THEME_PRESETS}
+          selectedIndex={selectedThemeIndex}
+          activeThemeId={activeThemeId}
         />
       ) : (
         <Box flexDirection="column" width="100%" flexGrow={1}>

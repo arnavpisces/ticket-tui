@@ -1,7 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Box, Text, useInput, useStdout } from 'ink';
-import TextInput from 'ink-text-input';
-import { JiraIssue, JiraTransition, JiraAttachment, JiraPriority } from '../../api/jira-client.js';
+import TextInput from '../common/WordTextInput.js';
+import {
+  JiraIssue,
+  JiraTransition,
+  JiraAttachment,
+  JiraPriority,
+  JiraTransitionField,
+} from '../../api/jira-client.js';
 import { AdfConverter } from '../../formatters/adf-converter.js';
 import { SelectableItem } from '../common/SelectableItem.js';
 import { ShortcutHints } from '../common/ShortcutHints.js';
@@ -25,8 +31,15 @@ type DetailMode =
   | 'attachments'
   | 'upload-attachment'
   | 'select-status'
+  | 'transition-fields'
   | 'select-priority'
   | 'select-comment';
+
+interface TransitionRequiredFieldState {
+  id: string;
+  name: string;
+  definition: JiraTransitionField;
+}
 
 export interface TicketDetailProps {
   issue: JiraIssue;
@@ -40,13 +53,263 @@ export interface TicketDetailProps {
   onAssignToMe?: () => Promise<void>;
   onAddComment?: (comment: string) => Promise<void>;
   onUpdateComment?: (commentId: string, comment: string) => Promise<void>;
-  onTransition?: (transitionId: string) => Promise<void>;
+  onTransition?: (transitionId: string, fields?: Record<string, any>) => Promise<void>;
+  onRefreshTransitions?: () => Promise<void>;
+  onSearchUsers?: (query: string) => Promise<Array<{ accountId: string; displayName: string; emailAddress?: string }>>;
+  onResolveTransitionFields?: (
+    transitionId: string,
+    requiredFieldNames?: string[]
+  ) => Promise<Record<string, JiraTransitionField>>;
   onFetchComments?: () => Promise<any[]>;
   onDownloadAttachment?: (attachmentId: string, filename: string) => Promise<{ data: Buffer; filename: string }>;
   onUploadAttachment?: (filePath: string) => Promise<void>;
   onBookmarkChanged?: () => void;
+  onCreateChildTicket?: () => void;
   onRefresh?: () => Promise<void> | void;
   onBack?: () => void;
+}
+
+function getRequiredTransitionFields(transition: JiraTransition | undefined): TransitionRequiredFieldState[] {
+  if (!transition?.fields) return [];
+
+  return Object.entries(transition.fields)
+    .filter(([, definition]) => {
+      if (!definition?.required) return false;
+      const operations = Array.isArray(definition.operations) ? definition.operations : [];
+      const canSet = operations.length === 0 || operations.includes('set');
+      return canSet;
+    })
+    .map(([fieldId, definition]) => ({
+      id: fieldId,
+      name: definition.name || fieldId,
+      definition,
+    }));
+}
+
+function buildFieldValueFromAllowed(fieldId: string, rawValue: Record<string, any>): any {
+  if (!rawValue || typeof rawValue !== 'object') {
+    return rawValue;
+  }
+
+  const schemaType = String(rawValue?.schema?.type || '').toLowerCase();
+  if (schemaType === 'user' && rawValue.accountId) {
+    return { accountId: rawValue.accountId };
+  }
+  if (rawValue.id !== undefined && rawValue.id !== null && rawValue.id !== '') {
+    return { id: String(rawValue.id) };
+  }
+  if (rawValue.value !== undefined) {
+    return { value: rawValue.value };
+  }
+  if (rawValue.name !== undefined) {
+    return { name: rawValue.name };
+  }
+  if (rawValue.key !== undefined) {
+    return { key: rawValue.key };
+  }
+  // Fallback to full object for custom transitions expecting richer payloads.
+  return rawValue;
+}
+
+function formatAllowedValueLabel(rawValue: Record<string, any>): string {
+  if (!rawValue || typeof rawValue !== 'object') {
+    return String(rawValue ?? '');
+  }
+
+  if (typeof rawValue.displayName === 'string' && rawValue.displayName.trim()) {
+    return rawValue.displayName;
+  }
+  if (typeof rawValue.name === 'string' && rawValue.name.trim()) {
+    return rawValue.name;
+  }
+  if (typeof rawValue.value === 'string' && rawValue.value.trim()) {
+    return rawValue.value;
+  }
+  if (typeof rawValue.key === 'string' && rawValue.key.trim()) {
+    return rawValue.key;
+  }
+  if (rawValue.id !== undefined && rawValue.id !== null) {
+    return String(rawValue.id);
+  }
+
+  return JSON.stringify(rawValue);
+}
+
+function buildFieldValueFromText(fieldId: string, definition: JiraTransitionField, rawInput: string): any {
+  const input = rawInput.trim();
+  const schemaType = String(definition?.schema?.type || '').toLowerCase();
+  const schemaSystem = String(definition?.schema?.system || '').toLowerCase();
+  const schemaCustom = String(definition?.schema?.custom || '').toLowerCase();
+  const requiresAdf =
+    schemaType === 'doc' ||
+    schemaType === 'textarea' ||
+    schemaSystem === 'description' ||
+    schemaCustom.includes(':textarea') ||
+    schemaCustom.includes('richtext');
+
+  const asAdfDoc = (text: string) => ({
+    type: 'doc',
+    version: 1,
+    content: [
+      {
+        type: 'paragraph',
+        content: [
+          {
+            type: 'text',
+            text,
+          },
+        ],
+      },
+    ],
+  });
+
+  if (schemaType === 'number') {
+    const parsed = Number(input);
+    return Number.isFinite(parsed) ? parsed : input;
+  }
+
+  if (schemaType === 'user') {
+    return { accountId: input };
+  }
+
+  if (
+    schemaType === 'option' ||
+    schemaType === 'priority' ||
+    schemaType === 'resolution' ||
+    schemaType === 'version' ||
+    schemaType === 'component' ||
+    schemaSystem === 'resolution' ||
+    schemaSystem === 'priority'
+  ) {
+    return /^\d+$/.test(input) ? { id: input } : { name: input };
+  }
+
+  if (schemaType === 'array') {
+    const values = input
+      .split(',')
+      .map((part) => part.trim())
+      .filter(Boolean);
+    const itemType = String(definition?.schema?.items || '').toLowerCase();
+    if (itemType === 'number') {
+      return values.map((v) => {
+        const parsed = Number(v);
+        return Number.isFinite(parsed) ? parsed : v;
+      });
+    }
+    if (itemType === 'option' || itemType === 'version' || itemType === 'component') {
+      return values.map((v) => (/^\d+$/.test(v) ? { id: v } : { name: v }));
+    }
+    if (itemType === 'user') {
+      return values.map((v) => ({ accountId: v }));
+    }
+    return values;
+  }
+
+  if (requiresAdf) {
+    return asAdfDoc(input);
+  }
+
+  // URL and string-like custom fields use raw string.
+  if (schemaType === 'string' || schemaCustom.includes('url')) {
+    return input;
+  }
+
+  return input;
+}
+
+function getTransitionFieldInputHint(definition: JiraTransitionField): string {
+  const schemaType = String(definition?.schema?.type || '').toLowerCase();
+  const schemaCustom = String(definition?.schema?.custom || '').toLowerCase();
+
+  if ((definition.allowedValues || []).length > 0) {
+    return 'Pick a value with ↑/↓ and press Enter.';
+  }
+  if (schemaCustom.includes('url')) {
+    return 'Enter a full URL (for example https://example.com/doc).';
+  }
+  if (schemaType === 'number') {
+    return 'Enter a numeric value.';
+  }
+  if (schemaType === 'array') {
+    return 'Enter comma-separated values.';
+  }
+  if (schemaType === 'user') {
+    return 'Type a Jira user name and select from suggestions (or enter accountId).';
+  }
+  return 'Enter a value and press Enter.';
+}
+
+function normalizeFieldToken(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function extractRequiredFieldNamesFromError(errorMessage: string): string[] {
+  const names = new Set<string>();
+  const trimmed = errorMessage.trim();
+  const payloadStart = trimmed.indexOf('{');
+  const payload = payloadStart >= 0 ? trimmed.slice(payloadStart) : '';
+  let errorMessages: string[] = [];
+  let errorEntries: Array<[string, string]> = [];
+
+  if (payload) {
+    try {
+      const parsed = JSON.parse(payload) as {
+        errorMessages?: string[];
+        errors?: Record<string, string>;
+      };
+      if (Array.isArray(parsed.errorMessages)) {
+        errorMessages = parsed.errorMessages.filter((entry): entry is string => typeof entry === 'string');
+      }
+      if (parsed.errors && typeof parsed.errors === 'object') {
+        errorEntries = Object.entries(parsed.errors).filter(
+          (entry): entry is [string, string] => typeof entry[1] === 'string'
+        );
+      }
+    } catch {
+      // Ignore parse issues and fallback to regex scanning on plain text.
+    }
+  }
+
+  const combinedMessages = [...errorMessages];
+  if (combinedMessages.length === 0) {
+    combinedMessages.push(trimmed);
+  }
+
+  for (const message of combinedMessages) {
+    const match = message.match(/field\s+(.+?)\s+is required/i);
+    if (match && match[1]) {
+      names.add(match[1].trim());
+    }
+  }
+
+  for (const [fieldKey, message] of errorEntries) {
+    if (/required/i.test(message)) {
+      names.add(fieldKey);
+    }
+  }
+
+  return [...names];
+}
+
+function buildQueueForNamedRequiredFields(
+  fields: Record<string, JiraTransitionField>,
+  requiredNames: string[]
+): TransitionRequiredFieldState[] {
+  const wanted = new Set(requiredNames.map(normalizeFieldToken));
+  const queue: TransitionRequiredFieldState[] = [];
+
+  for (const [fieldId, definition] of Object.entries(fields || {})) {
+    const nameToken = normalizeFieldToken(definition?.name || '');
+    const idToken = normalizeFieldToken(fieldId);
+    if (!wanted.has(nameToken) && !wanted.has(idToken)) continue;
+    queue.push({
+      id: fieldId,
+      name: definition.name || fieldId,
+      definition,
+    });
+  }
+
+  return queue;
 }
 
 export function TicketDetail({
@@ -62,10 +325,14 @@ export function TicketDetail({
   onAddComment,
   onUpdateComment,
   onTransition,
+  onRefreshTransitions,
+  onSearchUsers,
+  onResolveTransitionFields,
   onFetchComments,
   onDownloadAttachment,
   onUploadAttachment,
   onBookmarkChanged,
+  onCreateChildTicket,
   onRefresh,
   onBack
 }: TicketDetailProps) {
@@ -76,6 +343,16 @@ export function TicketDetail({
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [selectedCommentIndex, setSelectedCommentIndex] = useState(0);
   const [selectedTransitionIndex, setSelectedTransitionIndex] = useState(0);
+  const [transitionFieldsQueue, setTransitionFieldsQueue] = useState<TransitionRequiredFieldState[]>([]);
+  const [transitionFieldCursor, setTransitionFieldCursor] = useState(0);
+  const [transitionFieldValues, setTransitionFieldValues] = useState<Record<string, any>>({});
+  const [transitionFieldInput, setTransitionFieldInput] = useState('');
+  const [transitionAllowedIndex, setTransitionAllowedIndex] = useState(0);
+  const [transitionUserOptions, setTransitionUserOptions] = useState<Array<{ accountId: string; displayName: string; emailAddress?: string }>>([]);
+  const [transitionUserIndex, setTransitionUserIndex] = useState(0);
+  const [transitionUserLoading, setTransitionUserLoading] = useState(false);
+  const [pendingTransitionId, setPendingTransitionId] = useState<string | null>(null);
+  const [transitionLoading, setTransitionLoading] = useState(false);
   const [selectedPriorityIndex, setSelectedPriorityIndex] = useState(0);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -85,6 +362,10 @@ export function TicketDetail({
   const [allComments, setAllComments] = useState<any[]>([]);
   const [attachmentsMessage, setAttachmentsMessage] = useState<string | null>(null);
   const [uploadPath, setUploadPath] = useState('');
+  const [isExternalEditing, setIsExternalEditing] = useState(false);
+  const [ignoreEscapeUntil, setIgnoreEscapeUntil] = useState(0);
+  const externalEditorBusyRef = useRef(false);
+  const userSearchCacheRef = useRef<Map<string, Array<{ accountId: string; displayName: string; emailAddress?: string }>>>(new Map());
 
   const description = AdfConverter.adfToMarkdown(issue.fields.description);
   const parentIssue = issue.fields.parent;
@@ -95,10 +376,83 @@ export function TicketDetail({
   const assigneeIsMe = Boolean(currentAccountId && currentAssigneeAccountId === currentAccountId);
   const comments = issue.fields.comment?.comments || [];
   const attachments = issue.fields.attachment || [];
+  const isEpicIssue = String(issue.fields.issuetype?.name || '').trim().toLowerCase() === 'epic';
   const terminalRows = stdout?.rows || 24;
   const compactViewport = terminalRows <= 32;
   const previewWidth = Math.max(20, (stdout?.columns || 80) - 10);
   const descriptionPreviewLines = compactViewport ? 3 : 5;
+  const activeTransition = pendingTransitionId
+    ? transitions.find((transition) => transition.id === pendingTransitionId)
+    : null;
+  const currentTransitionField = transitionFieldsQueue[transitionFieldCursor];
+  const currentTransitionAllowedValues = Array.isArray(currentTransitionField?.definition?.allowedValues)
+    ? currentTransitionField.definition.allowedValues
+    : [];
+  const isCurrentTransitionFieldSelect = currentTransitionAllowedValues.length > 0;
+  const currentTransitionSchemaType = String(currentTransitionField?.definition?.schema?.type || '').toLowerCase();
+  const currentTransitionSchemaItems = String(currentTransitionField?.definition?.schema?.items || '').toLowerCase();
+  const isCurrentTransitionUserField = !isCurrentTransitionFieldSelect && (
+    currentTransitionSchemaType === 'user' ||
+    (currentTransitionSchemaType === 'array' && currentTransitionSchemaItems === 'user')
+  );
+
+  useEffect(() => {
+    if (selectedTransitionIndex < transitions.length) return;
+    setSelectedTransitionIndex(Math.max(0, transitions.length - 1));
+  }, [selectedTransitionIndex, transitions.length]);
+
+  useEffect(() => {
+    if (mode !== 'transition-fields' || !isCurrentTransitionUserField || !onSearchUsers) {
+      setTransitionUserLoading(false);
+      setTransitionUserOptions([]);
+      setTransitionUserIndex(0);
+      return;
+    }
+
+    const query = transitionFieldInput.trim();
+    if (!query) {
+      setTransitionUserLoading(false);
+      setTransitionUserOptions([]);
+      setTransitionUserIndex(0);
+      return;
+    }
+
+    const cacheKey = query.toLowerCase();
+    const cached = userSearchCacheRef.current.get(cacheKey);
+    if (cached) {
+      setTransitionUserOptions(cached);
+      setTransitionUserIndex(0);
+      setTransitionUserLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      setTransitionUserLoading(true);
+      try {
+        const users = await onSearchUsers(query);
+        if (cancelled) return;
+        const normalized = (users || []).slice(0, 8);
+        userSearchCacheRef.current.set(cacheKey, normalized);
+        setTransitionUserOptions(normalized);
+        setTransitionUserIndex(0);
+      } catch {
+        if (!cancelled) {
+          setTransitionUserOptions([]);
+          setTransitionUserIndex(0);
+        }
+      } finally {
+        if (!cancelled) {
+          setTransitionUserLoading(false);
+        }
+      }
+    }, 180);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [mode, isCurrentTransitionUserField, onSearchUsers, transitionFieldInput, currentTransitionField?.id]);
 
   const renderMarkdownPreview = (markdown: string, maxLines: number) => {
     const lines = markdown.split('\n');
@@ -125,7 +479,11 @@ export function TicketDetail({
   );
 
   // Selectable items in view mode.
-  const selectableItems = ['status', 'assignee', 'priority', 'title', 'description', 'comments', 'attachments', 'add-comment'];
+  const selectableItems = ['status', 'assignee', 'priority', 'title'];
+  if (isEpicIssue) {
+    selectableItems.push('add-child-ticket');
+  }
+  selectableItems.push('description', 'comments', 'attachments', 'add-comment');
   if (myComments.length > 0) {
     selectableItems.push('edit-comment');
   }
@@ -159,21 +517,46 @@ export function TicketDetail({
     }
   }, [mode, onFetchComments]);
 
+  useEffect(() => {
+    setPendingTransitionId(null);
+    setTransitionFieldsQueue([]);
+    setTransitionFieldCursor(0);
+    setTransitionFieldValues({});
+    setTransitionFieldInput('');
+    setTransitionAllowedIndex(0);
+  }, [issue.key]);
+
   // Handle keyboard input
   useInput((input, key) => {
+    if (Date.now() < ignoreEscapeUntil) {
+      return;
+    }
+
     // External editor for long-form fields
     if ((key.ctrl && input === 'e') && (mode === 'edit-description' || mode === 'add-comment' || mode === 'edit-comment')) {
-      (async () => {
-        setSaving(true);
-        const result = await openExternalEditor({
-          content: editValue,
-          extension: 'md',
-        });
-        setSaving(false);
-        if (result.success && result.content !== undefined) {
-          setEditValue(result.content);
-        } else if (result.error) {
-          setError(result.error);
+      if (externalEditorBusyRef.current || isExternalEditing) {
+        return;
+      }
+      externalEditorBusyRef.current = true;
+      setIsExternalEditing(true);
+      setSaving(true);
+      void (async () => {
+        try {
+          const result = await openExternalEditor({
+            content: editValue,
+            extension: 'md',
+          });
+          if (result.success && result.content !== undefined) {
+            setEditValue(result.content);
+          } else if (result.error) {
+            setError(result.error);
+          }
+        } finally {
+          setSaving(false);
+          setIsExternalEditing(false);
+          externalEditorBusyRef.current = false;
+          // Ignore trailing ESC emitted by editor quit sequences.
+          setIgnoreEscapeUntil(Date.now() + 300);
         }
       })();
       return;
@@ -203,6 +586,12 @@ export function TicketDetail({
 
     // Global Escape Handler
     if (key.escape) {
+      if (mode === 'transition-fields') {
+        setMode('select-status');
+        resetTransitionFieldFlow();
+        setError(null);
+        return;
+      }
       if (mode !== 'view') {
         handleCancel();
       } else if (onBack) {
@@ -270,12 +659,38 @@ export function TicketDetail({
 
     // Status selection mode
     if (mode === 'select-status') {
+      if (transitionLoading) {
+        return;
+      }
       if (key.upArrow) {
         setSelectedTransitionIndex(prev => Math.max(0, prev - 1));
       } else if (key.downArrow) {
         setSelectedTransitionIndex(prev => Math.min(transitions.length - 1, prev + 1));
       } else if (key.return && transitions.length > 0) {
-        handleTransition();
+        void beginTransition();
+      }
+      return;
+    }
+
+    if (mode === 'transition-fields') {
+      if (isCurrentTransitionFieldSelect) {
+        if (key.upArrow) {
+          setTransitionAllowedIndex((prev) =>
+            Math.max(0, prev - 1)
+          );
+        } else if (key.downArrow) {
+          setTransitionAllowedIndex((prev) =>
+            Math.min(currentTransitionAllowedValues.length - 1, prev + 1)
+          );
+        } else if (key.return) {
+          submitCurrentTransitionAllowedField();
+        }
+      } else if (isCurrentTransitionUserField && transitionUserOptions.length > 0) {
+        if (key.upArrow) {
+          setTransitionUserIndex((prev) => Math.max(0, prev - 1));
+        } else if (key.downArrow) {
+          setTransitionUserIndex((prev) => Math.min(transitionUserOptions.length - 1, prev + 1));
+        }
       }
       return;
     }
@@ -308,7 +723,7 @@ export function TicketDetail({
     } else if (key.return) {
       handleSelect();
     }
-  });
+  }, { isActive: !isExternalEditing });
 
   const handleCopyUrl = async () => {
     try {
@@ -330,16 +745,219 @@ export function TicketDetail({
     }
   };
 
+  function resetTransitionFieldFlow() {
+    setPendingTransitionId(null);
+    setTransitionFieldsQueue([]);
+    setTransitionFieldCursor(0);
+    setTransitionFieldValues({});
+    setTransitionFieldInput('');
+    setTransitionAllowedIndex(0);
+    setTransitionUserLoading(false);
+    setTransitionUserOptions([]);
+    setTransitionUserIndex(0);
+  }
+
+  async function applyTransition(transitionId: string, fields?: Record<string, any>) {
+    if (saving || !transitionId) return;
+    setSaving(true);
+    setError(null);
+
+    try {
+      if (onTransition) {
+        await onTransition(transitionId, fields);
+      }
+      if (onRefresh) await onRefresh();
+      if (onRefreshTransitions) await onRefreshTransitions();
+      setMode('view');
+      resetTransitionFieldFlow();
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Status change failed';
+      const requiredFieldNames = extractRequiredFieldNamesFromError(errorMessage);
+
+      if (requiredFieldNames.length > 0 && onResolveTransitionFields) {
+        try {
+          const resolvedFields = await onResolveTransitionFields(transitionId, requiredFieldNames);
+          const queue = buildQueueForNamedRequiredFields(resolvedFields, requiredFieldNames);
+          if (queue.length > 0) {
+            const firstField = queue[0];
+            setPendingTransitionId(transitionId);
+            setTransitionFieldsQueue(queue);
+            setTransitionFieldCursor(0);
+            setTransitionFieldValues(fields || {});
+            setTransitionAllowedIndex(0);
+            if (
+              Array.isArray(firstField?.definition?.allowedValues) &&
+              firstField.definition.allowedValues.length > 0
+            ) {
+              setTransitionFieldInput('');
+            } else if (typeof firstField?.definition?.defaultValue === 'string') {
+              setTransitionFieldInput(firstField.definition.defaultValue);
+            } else {
+              setTransitionFieldInput('');
+            }
+            setMode('transition-fields');
+            setError(`Fill required field${queue.length > 1 ? 's' : ''} to continue.`);
+            return;
+          }
+        } catch {
+          // Fall through to existing error handling.
+        }
+      }
+
+      if (onRefreshTransitions) {
+        try {
+          await onRefreshTransitions();
+        } catch {
+          // Keep showing the original transition error if refresh fails.
+        }
+      }
+      setError(errorMessage);
+      setMode('select-status');
+      resetTransitionFieldFlow();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function beginTransition() {
+    if (transitionLoading) return;
+    const selectedTransition = transitions[selectedTransitionIndex];
+    if (!selectedTransition) return;
+
+    let transitionWithFields = selectedTransition;
+    if (onResolveTransitionFields) {
+      try {
+        const resolvedFields = await onResolveTransitionFields(selectedTransition.id);
+        if (Object.keys(resolvedFields).length > 0) {
+          transitionWithFields = {
+            ...selectedTransition,
+            fields: resolvedFields,
+          };
+        }
+      } catch {
+        // Ignore metadata fetch issues and fallback to current transition payload.
+      }
+    }
+
+    const requiredFields = getRequiredTransitionFields(transitionWithFields);
+    if (requiredFields.length === 0) {
+      await applyTransition(selectedTransition.id);
+      return;
+    }
+
+    setPendingTransitionId(transitionWithFields.id);
+    setTransitionFieldsQueue(requiredFields);
+    setTransitionFieldCursor(0);
+    setTransitionFieldValues({});
+    setTransitionAllowedIndex(0);
+    if (
+      Array.isArray(requiredFields[0]?.definition?.allowedValues) &&
+      requiredFields[0].definition.allowedValues.length > 0
+    ) {
+      setTransitionFieldInput('');
+    } else if (typeof requiredFields[0]?.definition?.defaultValue === 'string') {
+      setTransitionFieldInput(requiredFields[0].definition.defaultValue);
+    } else {
+      setTransitionFieldInput('');
+    }
+    setMode('transition-fields');
+  }
+
+  async function openStatusSelector() {
+    setError(null);
+    resetTransitionFieldFlow();
+    if (onRefreshTransitions) {
+      setTransitionLoading(true);
+      try {
+        await onRefreshTransitions();
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to refresh available transitions');
+      } finally {
+        setTransitionLoading(false);
+      }
+    }
+    setSelectedTransitionIndex(0);
+    setMode('select-status');
+  }
+
+  function commitCurrentTransitionField(value: any) {
+    const activeField = currentTransitionField;
+    if (!activeField || !pendingTransitionId) return;
+
+    const nextValues = {
+      ...transitionFieldValues,
+      [activeField.id]: value,
+    };
+    setTransitionFieldValues(nextValues);
+    setError(null);
+
+    if (transitionFieldCursor >= transitionFieldsQueue.length - 1) {
+      void applyTransition(pendingTransitionId, nextValues);
+      return;
+    }
+
+    const nextCursor = transitionFieldCursor + 1;
+    const nextField = transitionFieldsQueue[nextCursor];
+    setTransitionFieldCursor(nextCursor);
+    setTransitionAllowedIndex(0);
+    if (Array.isArray(nextField?.definition?.allowedValues) && nextField.definition.allowedValues.length > 0) {
+      setTransitionFieldInput('');
+    } else if (typeof nextField?.definition?.defaultValue === 'string') {
+      setTransitionFieldInput(nextField.definition.defaultValue);
+    } else {
+      setTransitionFieldInput('');
+    }
+  }
+
+  function submitCurrentTransitionTextField() {
+    if (!currentTransitionField) return;
+
+    const rawInput = transitionFieldInput.trim();
+    if (!rawInput) {
+      setError(`${currentTransitionField.name} is required.`);
+      return;
+    }
+
+    const parsed = buildFieldValueFromText(
+      currentTransitionField.id,
+      currentTransitionField.definition,
+      rawInput
+    );
+    commitCurrentTransitionField(parsed);
+  }
+
+  function submitCurrentTransitionInput() {
+    if (isCurrentTransitionUserField && transitionUserOptions.length > 0) {
+      const selected = transitionUserOptions[transitionUserIndex] || transitionUserOptions[0];
+      if (selected?.accountId) {
+        commitCurrentTransitionField({ accountId: selected.accountId });
+        return;
+      }
+    }
+
+    submitCurrentTransitionTextField();
+  }
+
+  function submitCurrentTransitionAllowedField() {
+    if (!currentTransitionField || currentTransitionAllowedValues.length === 0) return;
+
+    const selected = currentTransitionAllowedValues[transitionAllowedIndex];
+    if (!selected) {
+      setError(`${currentTransitionField.name} is required.`);
+      return;
+    }
+
+    const parsed = buildFieldValueFromAllowed(currentTransitionField.id, selected);
+    commitCurrentTransitionField(parsed);
+  }
+
   const handleSelect = () => {
     setError(null);
     const item = selectableItems[selectedIndex];
 
     switch (item) {
       case 'status':
-        if (transitions.length > 0) {
-          setSelectedTransitionIndex(0);
-          setMode('select-status');
-        }
+        void openStatusSelector();
         break;
       case 'priority':
         if (priorities.length > 0) {
@@ -357,6 +975,9 @@ export function TicketDetail({
       case 'title':
         setEditValue(issue.fields.summary);
         setMode('edit-title');
+        break;
+      case 'add-child-ticket':
+        onCreateChildTicket?.();
         break;
       case 'description':
         setEditValue(description.slice(0, 500));
@@ -380,24 +1001,6 @@ export function TicketDetail({
           setMode('select-comment');
         }
         break;
-    }
-  };
-
-  const handleTransition = async () => {
-    if (saving || transitions.length === 0) return;
-    setSaving(true);
-    setError(null);
-
-    try {
-      if (onTransition) {
-        await onTransition(transitions[selectedTransitionIndex].id);
-      }
-      if (onRefresh) await onRefresh();
-      setMode('view');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Status change failed');
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -481,10 +1084,12 @@ export function TicketDetail({
 
   const handleCancel = () => {
     setMode('view');
+    setTransitionLoading(false);
     setEditValue('');
     setEditingCommentId(null);
     setError(null);
     setSelectedIndex(0);
+    resetTransitionFieldFlow();
   };
 
   const handleDownloadAttachment = async (attachment: JiraAttachment) => {
@@ -518,16 +1123,24 @@ export function TicketDetail({
             📋 Change Status (Current: {issue.fields.status.name})
           </Text>
           <Box flexDirection="column" marginTop={1}>
-            {transitions.map((t, i) => (
-              <Text
-                key={t.id}
-                color={i === selectedTransitionIndex ? te.accentAlt : te.fg}
-                bold={i === selectedTransitionIndex}
-              >
-                {i === selectedTransitionIndex ? '▶ ' : '  '}
-                {t.name} → {t.to.name}
-              </Text>
-            ))}
+            {transitionLoading && <Text color={te.muted}>Refreshing available transitions...</Text>}
+            {!transitionLoading && transitions.length === 0 && (
+              <Text color={te.warning}>No status transitions are available from the current state.</Text>
+            )}
+            {!transitionLoading && transitions.map((t, i) => {
+              const requiredCount = getRequiredTransitionFields(t).length;
+              return (
+                <Text
+                  key={t.id}
+                  color={i === selectedTransitionIndex ? te.accentAlt : te.fg}
+                  bold={i === selectedTransitionIndex}
+                >
+                  {i === selectedTransitionIndex ? '▶ ' : '  '}
+                  {t.name} → {t.to.name}
+                  {requiredCount > 0 ? ` (${requiredCount} required field${requiredCount > 1 ? 's' : ''})` : ''}
+                </Text>
+              );
+            })}
           </Box>
         </Box>
 
@@ -540,6 +1153,106 @@ export function TicketDetail({
               { key: 'Enter', label: 'Apply' },
               { key: 'Escape', label: 'Cancel' },
             ]}
+          />
+        </Box>
+      </Box>
+    );
+  }
+
+  if (mode === 'transition-fields') {
+    if (!activeTransition || !currentTransitionField) {
+      return (
+        <Box flexDirection="column" width="100%">
+          {error && <Text color="red">Error: {error}</Text>}
+          <Text color={te.warning}>Missing transition field metadata. Press Escape and retry.</Text>
+        </Box>
+      );
+    }
+
+    return (
+      <Box flexDirection="column" width="100%">
+        {error && <Text color="red">Error: {error}</Text>}
+
+        <Box
+          flexDirection="column"
+          borderStyle="round"
+          borderColor={te.accent}
+          paddingX={1}
+          marginY={1}
+        >
+          <Text bold color={te.accentAlt}>
+            📋 Required Field ({transitionFieldCursor + 1}/{transitionFieldsQueue.length})
+          </Text>
+          <Box marginTop={1} flexDirection="column">
+            <Text color="white">{currentTransitionField.name}</Text>
+            <Text dimColor>{getTransitionFieldInputHint(currentTransitionField.definition)}</Text>
+          </Box>
+
+          {isCurrentTransitionFieldSelect ? (
+            <Box marginTop={1} flexDirection="column">
+              {currentTransitionAllowedValues.map((option, idx) => (
+                <Text
+                  key={`${currentTransitionField.id}-${idx}`}
+                  color={idx === transitionAllowedIndex ? te.accentAlt : te.fg}
+                  bold={idx === transitionAllowedIndex}
+                >
+                  {idx === transitionAllowedIndex ? '▶ ' : '  '}
+                  {formatAllowedValueLabel(option)}
+                </Text>
+              ))}
+            </Box>
+          ) : (
+            <Box marginTop={1} borderStyle="round" borderColor={te.accent} paddingX={1}>
+              <TextInput
+                value={transitionFieldInput}
+                onChange={setTransitionFieldInput}
+                onSubmit={submitCurrentTransitionInput}
+                placeholder={`Enter ${currentTransitionField.name}...`}
+                focus={!saving && !isExternalEditing}
+              />
+            </Box>
+          )}
+
+          {!isCurrentTransitionFieldSelect && isCurrentTransitionUserField && (
+            <Box marginTop={1} flexDirection="column">
+              {transitionUserLoading && <Text color={te.muted}>Searching users...</Text>}
+              {!transitionUserLoading && transitionUserOptions.length > 0 && transitionUserOptions.map((user, idx) => (
+                <Text
+                  key={`${currentTransitionField.id}:${user.accountId}`}
+                  color={idx === transitionUserIndex ? te.accentAlt : te.fg}
+                  bold={idx === transitionUserIndex}
+                >
+                  {idx === transitionUserIndex ? '▶ ' : '  '}
+                  {user.displayName}
+                  {user.emailAddress ? ` (${user.emailAddress})` : ''}
+                </Text>
+              ))}
+              {!transitionUserLoading && transitionFieldInput.trim().length > 0 && transitionUserOptions.length === 0 && (
+                <Text color={te.muted}>No matching users found. Press Enter to use the typed value.</Text>
+              )}
+            </Box>
+          )}
+        </Box>
+
+        {saving && <Text dimColor>Updating status...</Text>}
+
+        <Box marginTop={1}>
+          <ShortcutHints
+            hints={
+              isCurrentTransitionFieldSelect
+                ? [
+                  { key: '↑/↓', label: 'Choose' },
+                  { key: 'Enter', label: 'Next' },
+                  { key: 'Escape', label: 'Cancel' },
+                ]
+                : [
+                  ...(isCurrentTransitionUserField
+                    ? [{ key: '↑/↓', label: 'User' } as const]
+                    : []),
+                  { key: 'Enter', label: 'Next' },
+                  { key: 'Escape', label: 'Cancel' },
+                ]
+            }
           />
         </Box>
       </Box>
@@ -782,6 +1495,7 @@ export function TicketDetail({
               value={editValue}
               onChange={setEditValue}
               onSubmit={handleSave}
+              focus={!saving && !isExternalEditing}
             />
           </Box>
         </Box>
@@ -809,7 +1523,11 @@ export function TicketDetail({
 
       {/* Key (non-selectable header) */}
       <Box>
-        <Text bold color="white">{issue.key}</Text>
+        <Text bold backgroundColor={te.accent} color="black">
+          {' '}
+          {issue.key}
+          {' '}
+        </Text>
         <Text color={getJiraStatusColor(issue.fields.status?.name)}>  {issue.fields.status?.name}</Text>
         {issue.fields.issuetype?.name && (
           <Text color={getJiraTypeColor(issue.fields.issuetype.name)}> · {issue.fields.issuetype.name}</Text>
@@ -869,6 +1587,16 @@ export function TicketDetail({
         isSelected={isSelectedItem('title')}
         actionLabel="[EDIT]"
       />
+
+      {isEpicIssue && (
+        <SelectableItem
+          label="ADD CHILD TICKET"
+          content="Create a ticket linked to this epic"
+          isSelected={isSelectedItem('add-child-ticket')}
+          actionLabel="[CREATE]"
+          compact
+        />
+      )}
 
       {/* Selectable: Description */}
       <SelectableItem

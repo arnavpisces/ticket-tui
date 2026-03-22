@@ -45,6 +45,28 @@ export interface JiraTransition {
       key: string;
     };
   };
+  fields?: Record<string, JiraTransitionField>;
+}
+
+export interface JiraTransitionField {
+  required?: boolean;
+  name?: string;
+  key?: string;
+  hasDefaultValue?: boolean;
+  operations?: string[];
+  schema?: {
+    type?: string;
+    system?: string;
+    custom?: string;
+    customId?: number;
+    items?: string;
+  };
+  allowedValues?: Array<Record<string, any>>;
+  defaultValue?: any;
+}
+
+export interface JiraEditMetaResponse {
+  fields?: Record<string, JiraTransitionField>;
 }
 
 export interface JiraSearchResult {
@@ -55,6 +77,12 @@ export interface JiraSearchResult {
 export interface JiraPriority {
   id: string;
   name: string;
+}
+
+export interface JiraUser {
+  accountId: string;
+  displayName: string;
+  emailAddress?: string;
 }
 
 export interface JiraComment {
@@ -88,7 +116,7 @@ export class JiraClient {
 
   async getIssue(key: string): Promise<JiraIssue> {
     const expand = 'changelog,changelog.histories';
-    const fields = 'summary,description,parent,status,comment,attachment,issuetype,priority,labels,assignee,reporter,created,updated,duedate';
+    const fields = 'summary,description,parent,project,status,comment,attachment,issuetype,priority,labels,assignee,reporter,created,updated,duedate';
     return this.apiClient.get<JiraIssue>(
       `/rest/api/3/issue/${key}?expand=${expand}&fields=${fields}`
     );
@@ -103,14 +131,39 @@ export class JiraClient {
 
   async getTransitions(key: string): Promise<JiraTransition[]> {
     const response = await this.apiClient.get<{ transitions: JiraTransition[] }>(
-      `/rest/api/3/issue/${key}/transitions`
+      `/rest/api/3/issue/${key}/transitions?expand=transitions.fields`
     );
     return response.transitions;
   }
 
-  async transitionIssue(key: string, transitionId: string): Promise<void> {
-    await this.apiClient.post(`/rest/api/3/issue/${key}/transitions`, {
+  async getTransitionById(key: string, transitionId: string): Promise<JiraTransition | null> {
+    const response = await this.apiClient.get<{ transitions: JiraTransition[] }>(
+      `/rest/api/3/issue/${key}/transitions?expand=transitions.fields&transitionId=${encodeURIComponent(transitionId)}`
+    );
+    const transitions = Array.isArray(response.transitions) ? response.transitions : [];
+    return transitions.find((transition) => String(transition.id) === String(transitionId)) || null;
+  }
+
+  async getEditMetaFields(key: string): Promise<Record<string, JiraTransitionField>> {
+    const response = await this.apiClient.get<JiraEditMetaResponse>(
+      `/rest/api/3/issue/${key}/editmeta`
+    );
+    return response.fields || {};
+  }
+
+  async transitionIssue(
+    key: string,
+    transitionId: string,
+    fields?: Record<string, any>
+  ): Promise<void> {
+    const body: Record<string, any> = {
       transition: { id: transitionId },
+    };
+    if (fields && Object.keys(fields).length > 0) {
+      body.fields = fields;
+    }
+    await this.apiClient.post(`/rest/api/3/issue/${key}/transitions`, {
+      ...body,
     });
   }
 
@@ -145,40 +198,52 @@ export class JiraClient {
   async getIssueCount(jql: string): Promise<number> {
     const encodedJql = encodeURIComponent(jql);
     const fields = encodeURIComponent('id');
-    const pageSize = 100;
-    let startAt = 0;
+
+    // Exact count path for modern Jira Cloud.
+    // Use cursor pagination via nextPageToken; startAt is not reliable on /search/jql.
+    let nextPageToken: string | null = null;
     let counted = 0;
     let pageGuard = 0;
 
-    // Prefer enhanced search API and count incrementally. This avoids relying on `total`,
-    // which can be omitted in some Jira Cloud responses.
-    while (pageGuard < 100) {
-      try {
-        const page = await this.apiClient.get<any>(
-          `/rest/api/3/search/jql?jql=${encodedJql}&startAt=${startAt}&maxResults=${pageSize}&fields=${fields}`
+    try {
+      while (pageGuard < 200) {
+        const tokenPart: string = nextPageToken
+          ? `&nextPageToken=${encodeURIComponent(nextPageToken)}`
+          : '';
+        const page: any = await this.apiClient.get<any>(
+          `/rest/api/3/search/jql?jql=${encodedJql}&maxResults=5000&fields=${fields}${tokenPart}`
         );
 
         const issues = Array.isArray(page?.issues) ? page.issues : [];
-        const pageCount = issues.length;
-        counted += pageCount;
+        counted += issues.length;
 
-        const hasNext =
-          page?.isLast === false ||
-          Boolean(page?.nextPageToken) ||
-          (typeof page?.total === 'number' && startAt + pageCount < page.total);
+        const incomingToken: string = typeof page?.nextPageToken === 'string' ? page.nextPageToken : '';
+        const isLast = page?.isLast === true || !incomingToken || issues.length === 0;
 
-        if (!hasNext || pageCount === 0) {
-          if (typeof page?.total === 'number') {
-            return Math.max(counted, page.total);
-          }
+        if (isLast) {
           return counted;
         }
 
-        startAt += pageCount;
+        // Defensive guard for bad cursor responses.
+        if (incomingToken === nextPageToken) {
+          return counted;
+        }
+
+        nextPageToken = incomingToken;
         pageGuard += 1;
-      } catch {
-        break;
       }
+    } catch {
+      // Continue to other count strategies.
+    }
+
+    // Fast fallback where approximate endpoint exists.
+    try {
+      const approximate = await this.apiClient.post<any>('/rest/api/3/search/approximate-count', { jql });
+      if (typeof approximate?.count === 'number' && Number.isFinite(approximate.count)) {
+        return Math.max(0, Math.trunc(approximate.count));
+      }
+    } catch {
+      // Continue to final fallback.
     }
 
     // Final fallback for tenants where /search/jql is unavailable.
@@ -190,6 +255,39 @@ export class JiraClient {
     } catch {
       return counted;
     }
+  }
+
+  async getAssignedTicketCounts(): Promise<{ open: number; total: number }> {
+    const jql = 'assignee = currentUser() ORDER BY updated DESC';
+    const pageSize = 100;
+    const closedRegex = /(closed|complete|completed|cancelled|canceled)/i;
+
+    let startAt = 0;
+    let total = 0;
+    let open = 0;
+    let pageGuard = 0;
+
+    while (pageGuard < 400) {
+      const page = await this.searchIssues(jql, pageSize, startAt);
+      const issues = Array.isArray(page.issues) ? page.issues : [];
+      if (issues.length === 0) break;
+
+      total += issues.length;
+      for (const issue of issues) {
+        const statusName = String(issue?.fields?.status?.name || '');
+        if (!closedRegex.test(statusName)) {
+          open += 1;
+        }
+      }
+
+      startAt += issues.length;
+      pageGuard += 1;
+
+      if (typeof page.total === 'number' && startAt >= page.total) break;
+      if (issues.length < pageSize) break;
+    }
+
+    return { open, total };
   }
 
   async searchIssues(jql: string, maxResults: number = 50, startAt: number = 0): Promise<JiraSearchResult> {
@@ -340,6 +438,65 @@ export class JiraClient {
     }
 
     return [];
+  }
+
+  async searchUsers(query: string, maxResults: number = 10): Promise<JiraUser[]> {
+    const normalized = query.trim();
+    if (!normalized) return [];
+
+    const limit = Math.max(1, Math.min(50, maxResults));
+    const encodedQuery = encodeURIComponent(normalized);
+
+    const normalizeUsers = (payload: any): JiraUser[] => {
+      const list = Array.isArray(payload)
+        ? payload
+        : Array.isArray(payload?.users)
+          ? payload.users
+          : [];
+
+      const deduped = new Map<string, JiraUser>();
+      for (const user of list) {
+        const accountId = String(user?.accountId || '').trim();
+        const displayName = String(user?.displayName || '').trim();
+        if (!accountId || !displayName) continue;
+        if (deduped.has(accountId)) continue;
+        deduped.set(accountId, {
+          accountId,
+          displayName,
+          emailAddress: typeof user?.emailAddress === 'string' ? user.emailAddress : undefined,
+        });
+      }
+      return [...deduped.values()].slice(0, limit);
+    };
+
+    try {
+      const primary = await this.apiClient.get<any>(
+        `/rest/api/3/user/search?query=${encodedQuery}&maxResults=${limit}`
+      );
+      const users = normalizeUsers(primary);
+      if (users.length > 0) return users;
+    } catch {
+      // Fallback to other Jira Cloud user search endpoints.
+    }
+
+    try {
+      const picker = await this.apiClient.get<any>(
+        `/rest/api/3/user/picker?query=${encodedQuery}&maxResults=${limit}`
+      );
+      const users = normalizeUsers(picker);
+      if (users.length > 0) return users;
+    } catch {
+      // Continue to final fallback.
+    }
+
+    try {
+      const assignable = await this.apiClient.get<any>(
+        `/rest/api/3/user/assignable/search?query=${encodedQuery}&maxResults=${limit}`
+      );
+      return normalizeUsers(assignable);
+    } catch {
+      return [];
+    }
   }
 
   async createIssue(

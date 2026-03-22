@@ -45,7 +45,7 @@ export function JiraIssueHeader() {
 
   return (
     <Box>
-      <Text backgroundColor={te.bg} color={te.fg} bold>
+      <Text backgroundColor={te.accent} color="black" bold>
         {headerLine}
       </Text>
     </Box>
@@ -65,10 +65,12 @@ export function JiraIssueRow({ issue, isSelected }: { issue: JiraIssue; isSelect
   const statusColor = getJiraStatusColor(status);
   const typeColor = getJiraTypeColor(type);
   const priorityColor = getJiraPriorityColor(priority);
+  const keyBg = isSelected ? te.accentAlt : undefined;
+  const keyColor = isSelected ? 'black' : te.accentAlt;
 
   return (
     <Box>
-      <Text color={isSelected ? te.accentAlt : te.fg}>
+      <Text color={keyColor} backgroundColor={keyBg} bold={isSelected}>
         {padRight(issue.key, cols.key)}{' '}
       </Text>
       <Text color={statusColor} bold={isSelected}>
@@ -80,7 +82,7 @@ export function JiraIssueRow({ issue, isSelected }: { issue: JiraIssue; isSelect
       <Text color={priorityColor} bold={isSelected}>
         {padRight(priority || '—', cols.priority)}{' '}
       </Text>
-      <Text color={isSelected ? te.accentAlt : te.fg}>
+      <Text color={isSelected ? te.accentAlt : te.fg} bold={isSelected}>
         {truncate(summary, cols.summary)}
       </Text>
     </Box>

@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Box, Text, useInput } from 'ink';
-import { JiraClient, JiraTransition, JiraPriority } from '../../api/jira-client.js';
+import { JiraClient, JiraTransition, JiraPriority, JiraTransitionField } from '../../api/jira-client.js';
 import { useJiraIssue } from '../../hooks/useJiraIssue.js';
 import { TicketDetail } from './TicketDetail.js';
 import { TicketList } from './TicketList.js';
 import { FuzzySelect } from '../common/FuzzySelect.js';
 import { CreateTicket } from './CreateTicket.js';
-import { QuickFilters } from './QuickFilters.js';
+import { QuickFilters, QuickFilterContext } from './QuickFilters.js';
 import { JqlSearch } from './JqlSearch.js';
 import { SavedList } from '../common/SavedList.js';
 import { MenuList } from '../common/MenuList.js';
@@ -30,7 +30,7 @@ type ViewMode =
 export interface JiraViewProps {
   client: JiraClient;
   baseUrl: string;
-  onJiraDataChanged?: (doneDelta?: number, totalDelta?: number) => void;
+  onJiraDataChanged?: (openDelta?: number, totalDelta?: number) => void;
 }
 
 const jiraSearchCache = new PersistentCache<any[]>('jira:search', 300);
@@ -82,6 +82,17 @@ export function JiraView({ client, baseUrl, onJiraDataChanged }: JiraViewProps) 
   const [currentAccountId, setCurrentAccountId] = useState<string | undefined>();
   const [searchReturnView, setSearchReturnView] = useState<ViewMode>('menu');
   const [bookmarksVersion, setBookmarksVersion] = useState(0);
+  const [createReturnView, setCreateReturnView] = useState<ViewMode>('menu');
+  const [createDefaults, setCreateDefaults] = useState<{
+    projectKey?: string;
+    parentEpicKey?: string;
+    parentEpicLabel?: string;
+  } | null>(null);
+  const [quickFilterContext, setQuickFilterContext] = useState<QuickFilterContext | null>(null);
+  const issueStatusToken = `${issue?.fields.status?.id || ''}:${issue?.fields.status?.name || ''}`;
+
+  const isClosedForMetric = (statusName: string): boolean =>
+    /(closed|complete|completed|cancelled|canceled)/i.test(statusName);
 
   const menuItems = [
     { label: 'Browse All Tickets', value: 'list' },
@@ -113,20 +124,25 @@ export function JiraView({ client, baseUrl, onJiraDataChanged }: JiraViewProps) 
     fetchMyself();
   }, [client]);
 
-  // Fetch transitions when viewing a ticket
-  useEffect(() => {
-    if (viewMode === 'detail' && selectedKey) {
-      const fetchTransitions = async () => {
-        try {
-          const t = await client.getTransitions(selectedKey);
-          setTransitions(t);
-        } catch {
-          setTransitions([]);
-        }
-      };
-      fetchTransitions();
+  const refreshTransitions = useCallback(async () => {
+    if (!selectedKey) {
+      setTransitions([]);
+      return;
     }
-  }, [viewMode, selectedKey, client]);
+
+    try {
+      const latest = await client.getTransitions(selectedKey);
+      setTransitions(latest);
+    } catch {
+      setTransitions([]);
+    }
+  }, [client, selectedKey]);
+
+  // Fetch transitions when viewing a ticket and whenever the status changes.
+  useEffect(() => {
+    if (viewMode !== 'detail' || !selectedKey) return;
+    void refreshTransitions();
+  }, [viewMode, selectedKey, issueStatusToken, refreshTransitions]);
 
   const handleMenuSelect = (item: any) => {
     if (item.value === 'list') {
@@ -135,10 +151,13 @@ export function JiraView({ client, baseUrl, onJiraDataChanged }: JiraViewProps) 
       setSearchReturnView('menu');
       setViewMode('fuzzy-search');
     } else if (item.value === 'quick-filters') {
+      setQuickFilterContext(null);
       setViewMode('quick-filters');
     } else if (item.value === 'jql-search') {
       setViewMode('jql-search');
     } else if (item.value === 'create') {
+      setCreateDefaults(null);
+      setCreateReturnView('menu');
       setViewMode('create');
     } else if (item.value === 'bookmarks') {
       setViewMode('bookmarks');
@@ -186,6 +205,11 @@ export function JiraView({ client, baseUrl, onJiraDataChanged }: JiraViewProps) 
     openIssue(key);
   };
 
+  const handleQuickFilterIssueSelect = (key: string, context?: QuickFilterContext) => {
+    setQuickFilterContext(context || null);
+    openIssue(key, 'quick-filters');
+  };
+
   const goBack = () => {
     if (viewMode === 'detail') {
       setSelectedKey('');
@@ -211,6 +235,24 @@ export function JiraView({ client, baseUrl, onJiraDataChanged }: JiraViewProps) 
     invalidateJiraIssueCaches();
     onJiraDataChanged?.();
     openIssue(key, 'create');
+  };
+
+  const handleCreateChildFromEpic = () => {
+    if (!issue) return;
+    const isEpic = String(issue.fields.issuetype?.name || '').trim().toLowerCase() === 'epic';
+    if (!isEpic) return;
+
+    const inferredProjectKey =
+      issue.fields.project?.key ||
+      (selectedKey.includes('-') ? selectedKey.split('-')[0] : '');
+
+    setCreateDefaults({
+      projectKey: inferredProjectKey || undefined,
+      parentEpicKey: issue.key,
+      parentEpicLabel: `${issue.key}: ${issue.fields.summary}`,
+    });
+    setCreateReturnView('detail');
+    setViewMode('create');
   };
 
   const handleSaveTitle = async (title: string) => {
@@ -254,13 +296,10 @@ export function JiraView({ client, baseUrl, onJiraDataChanged }: JiraViewProps) 
     await client.assignIssueToMe(selectedKey);
     invalidateJiraIssueCaches();
     if (wasAssignedToMe) return; // Already mine, no metric change
-    const statusCategoryKey = String((issue?.fields.status as any)?.statusCategory?.key || '').toLowerCase();
-    const statusName = String(issue?.fields.status?.name || '').toLowerCase();
-    const isDone =
-      statusCategoryKey === 'done' ||
-      /(done|complete|completed|closed|resolved)/.test(statusName);
-    // New assignment: total +1, done +1 only if already completed.
-    onJiraDataChanged?.(isDone ? 1 : 0, 1);
+    const statusName = String(issue?.fields.status?.name || '');
+    const isOpen = !isClosedForMetric(statusName);
+    // New assignment: total +1, open +1 only if it is not closed/completed/cancelled.
+    onJiraDataChanged?.(isOpen ? 1 : 0, 1);
   };
 
   // Handle add comment
@@ -295,8 +334,12 @@ export function JiraView({ client, baseUrl, onJiraDataChanged }: JiraViewProps) 
     await client.updateComment(selectedKey, commentId, adfComment);
   };
 
+  const handleSearchUsers = async (query: string) => {
+    return client.searchUsers(query, 8);
+  };
+
   // Handle status transition
-  const handleTransition = async (transitionId: string) => {
+  const handleTransition = async (transitionId: string, transitionFields?: Record<string, any>) => {
     if (!selectedKey) return;
 
     const selectedTransition = transitions.find(t => t.id === transitionId);
@@ -306,8 +349,9 @@ export function JiraView({ client, baseUrl, onJiraDataChanged }: JiraViewProps) 
       issue.fields.assignee.accountId === currentAccountId
     );
 
-    await client.transitionIssue(selectedKey, transitionId);
+    await client.transitionIssue(selectedKey, transitionId, transitionFields);
     invalidateJiraIssueCaches();
+    await refreshTransitions();
 
     if (!isAssignedToMe || !selectedTransition) {
       // Not assigned to me or unknown transition — just trigger a re-fetch
@@ -315,24 +359,64 @@ export function JiraView({ client, baseUrl, onJiraDataChanged }: JiraViewProps) 
       return;
     }
 
-    const currentCatKey = String((issue?.fields.status as any)?.statusCategory?.key || '').toLowerCase();
-    const currentName = String(issue?.fields.status?.name || '').toLowerCase();
-    const wasDone = currentCatKey === 'done' || /(done|complete|completed|closed|resolved)/.test(currentName);
+    const wasOpen = !isClosedForMetric(String(issue?.fields.status?.name || ''));
+    const willBeOpen = !isClosedForMetric(String(selectedTransition.to.name || ''));
 
-    const targetCatKey = String(selectedTransition.to.statusCategory?.key || '').toLowerCase();
-    const targetName = String(selectedTransition.to.name || '').toLowerCase();
-    const willBeDone = targetCatKey === 'done' || /(done|complete|completed|closed|resolved)/.test(targetName);
-
-    if (!wasDone && willBeDone) {
-      // Moving to done: completed count +1
-      onJiraDataChanged?.(1, 0);
-    } else if (wasDone && !willBeDone) {
-      // Moving from done: completed count -1
+    if (wasOpen && !willBeOpen) {
+      // Moved into closed/completed/cancelled bucket.
       onJiraDataChanged?.(-1, 0);
+    } else if (!wasOpen && willBeOpen) {
+      // Moved out of closed/completed/cancelled bucket.
+      onJiraDataChanged?.(1, 0);
     } else {
-      // Same category — just re-fetch
+      // Same open/closed state — just re-fetch
       onJiraDataChanged?.();
     }
+  };
+
+  const resolveTransitionFields = async (
+    transitionId: string,
+    requiredFieldNames: string[] = []
+  ): Promise<Record<string, JiraTransitionField>> => {
+    if (!selectedKey) return {};
+
+    const merged: Record<string, JiraTransitionField> = {};
+
+    const fromList = transitions.find((transition) => transition.id === transitionId);
+    if (fromList?.fields) {
+      Object.assign(merged, fromList.fields);
+    }
+
+    try {
+      const detailed = await client.getTransitionById(selectedKey, transitionId);
+      if (detailed?.fields) {
+        Object.assign(merged, detailed.fields);
+      }
+    } catch {
+      // Ignore and fallback to already fetched metadata.
+    }
+
+    if (requiredFieldNames.length > 0) {
+      try {
+        const editFields = await client.getEditMetaFields(selectedKey);
+        const required = new Set(requiredFieldNames.map((name) => name.trim().toLowerCase()));
+        for (const [fieldId, definition] of Object.entries(editFields || {})) {
+          const normalizedId = fieldId.trim().toLowerCase();
+          const normalizedName = String(definition?.name || '').trim().toLowerCase();
+          if (required.has(normalizedId) || required.has(normalizedName)) {
+            merged[fieldId] = {
+              ...definition,
+              required: true,
+              operations: Array.isArray(definition.operations) ? definition.operations : ['set'],
+            };
+          }
+        }
+      } catch {
+        // Ignore fallback metadata failures.
+      }
+    }
+
+    return merged;
   };
 
   // Handle keyboard shortcuts (only for non-detail views - detail handles its own escape)
@@ -417,7 +501,9 @@ export function JiraView({ client, baseUrl, onJiraDataChanged }: JiraViewProps) 
       <ErrorBoundary key={errorBoundaryKey} onReset={goBack}>
         <QuickFilters
           client={client}
-          onSelectIssue={handleTicketSelect}
+          onSelectIssue={handleQuickFilterIssueSelect}
+          initialContext={quickFilterContext}
+          onContextChange={setQuickFilterContext}
           onCancel={goBack}
         />
       </ErrorBoundary>
@@ -488,7 +574,16 @@ export function JiraView({ client, baseUrl, onJiraDataChanged }: JiraViewProps) 
         <CreateTicket
           client={client}
           onCreated={handleCreated}
-          onCancel={goBack}
+          onCancel={() => {
+            if (createReturnView === 'detail' && selectedKey) {
+              setViewMode('detail');
+              return;
+            }
+            goBack();
+          }}
+          initialProjectKey={createDefaults?.projectKey}
+          initialParentEpicKey={createDefaults?.parentEpicKey}
+          initialParentEpicLabel={createDefaults?.parentEpicLabel}
         />
       </ErrorBoundary>
     );
@@ -523,6 +618,9 @@ export function JiraView({ client, baseUrl, onJiraDataChanged }: JiraViewProps) 
           onAddComment={handleAddComment}
           onUpdateComment={handleUpdateComment}
           onTransition={handleTransition}
+          onRefreshTransitions={refreshTransitions}
+          onSearchUsers={handleSearchUsers}
+          onResolveTransitionFields={resolveTransitionFields}
           onFetchComments={() => client.getComments(issue.key).then(r => r.comments as any)}
           onDownloadAttachment={async (attachmentId, filename) => {
             const data = await client.downloadAttachment(attachmentId);
@@ -530,6 +628,7 @@ export function JiraView({ client, baseUrl, onJiraDataChanged }: JiraViewProps) 
           }}
           onUploadAttachment={(filePath) => client.uploadAttachment(issue.key, filePath)}
           onBookmarkChanged={() => setBookmarksVersion(v => v + 1)}
+          onCreateChildTicket={handleCreateChildFromEpic}
           onRefresh={refetch}
           onBack={goBack}
         />

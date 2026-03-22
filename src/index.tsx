@@ -8,12 +8,14 @@ import { ConfigManager } from './config/config-manager.js';
 import { App } from './app.js';
 import { JiraClient } from './api/jira-client.js';
 import { ConfluenceClient } from './api/confluence-client.js';
-import { startAutoUpdater } from './utils/auto-updater.js';
+import { getRuntimePackageMetadata, startAutoUpdater, updateCliFromNpm } from './utils/auto-updater.js';
 
 const GREEN = '\x1b[32m';
 const BOLD_GREEN = '\x1b[1;32m';
 const RED = '\x1b[31m';
 const RESET = '\x1b[0m';
+const runtimePackageMetadata = getRuntimePackageMetadata();
+const cliVersion = runtimePackageMetadata?.version || '0.0.0';
 
 function createReadlineInterface(): readline.Interface {
   return readline.createInterface({
@@ -223,7 +225,7 @@ async function setupWizard(force: boolean = false): Promise<boolean> {
 program
   .name('sutra')
   .description('Terminal TUI for Jira tickets and Confluence docs')
-  .version('1.0.0');
+  .version(cliVersion);
 
 program
   .command('setup', { isDefault: false })
@@ -243,6 +245,29 @@ program
   .description('Start the TUI application')
   .action(() => {
     startApp();
+  });
+
+program
+  .command('update', { isDefault: false })
+  .description('Check npm for a newer Sutra release and install it')
+  .action(async () => {
+    console.log('Checking npm for Sutra updates...\n');
+
+    const result = await updateCliFromNpm();
+
+    if (result.status === 'up-to-date') {
+      console.log(`${GREEN}✓ ${result.message}${RESET}`);
+      return;
+    }
+
+    if (result.status === 'updated') {
+      console.log(`\n${GREEN}✓ ${result.message}${RESET}`);
+      console.log(`${GREEN}Restart Sutra to use the updated version.${RESET}`);
+      return;
+    }
+
+    console.log(`${RED}✗ Update failed: ${result.message}${RESET}`);
+    process.exit(1);
   });
 
 program.parse(process.argv);

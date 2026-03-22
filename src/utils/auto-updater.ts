@@ -1,7 +1,7 @@
 import { spawn } from 'child_process';
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 
-interface PackageMetadata {
+export interface PackageMetadata {
   name: string;
   version: string;
 }
@@ -12,6 +12,7 @@ export interface AutoUpdateEvent {
     | 'up-to-date'
     | 'update-available'
     | 'update-install-started'
+    | 'update-installed'
     | 'update-install-failed'
     | 'check-failed'
     | 'disabled';
@@ -22,6 +23,14 @@ export interface AutoUpdateEvent {
 }
 
 type AutoUpdateListener = (event: AutoUpdateEvent) => void;
+
+export interface ManualUpdateResult {
+  status: 'updated' | 'up-to-date' | 'failed';
+  packageName?: string;
+  currentVersion?: string;
+  latestVersion?: string;
+  message: string;
+}
 
 const DEFAULT_CHECK_INTERVAL_MS = 15 * 60 * 1000;
 const CHECK_TIMEOUT_MS = 8000;
@@ -66,7 +75,7 @@ export function subscribeAutoUpdateEvents(listener: AutoUpdateListener): () => v
   return () => listeners.delete(listener);
 }
 
-function readPackageMetadata(): PackageMetadata | null {
+export function getRuntimePackageMetadata(): PackageMetadata | null {
   try {
     const raw = readFileSync(new URL('../../package.json', import.meta.url), 'utf8');
     const parsed = JSON.parse(raw) as Partial<PackageMetadata>;
@@ -134,8 +143,26 @@ function getCheckIntervalMs(): number {
   return DEFAULT_CHECK_INTERVAL_MS;
 }
 
+function isLocalSourceCheckout(): boolean {
+  try {
+    return existsSync(new URL('../../.git', import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
 function shouldAutoUpdate(): boolean {
-  return process.env.SUTRA_DISABLE_AUTO_UPDATE !== '1';
+  if (process.env.SUTRA_FORCE_AUTO_UPDATE === '1') {
+    return true;
+  }
+  if (process.env.SUTRA_DISABLE_AUTO_UPDATE === '1') {
+    return false;
+  }
+  // Local source runs (for example `npm start`) should not self-update.
+  if (isLocalSourceCheckout()) {
+    return false;
+  }
+  return true;
 }
 
 async function fetchLatestVersion(packageName: string): Promise<string | null> {
@@ -159,6 +186,47 @@ async function fetchLatestVersion(packageName: string): Promise<string | null> {
   }
 }
 
+async function installVersion(
+  packageName: string,
+  targetVersion: string,
+  options: { silent: boolean; stdio: 'ignore' | 'inherit' }
+): Promise<{ success: boolean; error?: string }> {
+  return new Promise((resolve) => {
+    const args = [
+      'install',
+      '-g',
+      `${packageName}@${targetVersion}`,
+      ...(options.silent ? ['--silent'] : []),
+      '--no-fund',
+      '--no-audit',
+    ];
+
+    const child = spawn('npm', args, {
+      stdio: options.stdio,
+      detached: false,
+    });
+
+    child.on('error', (error) => {
+      resolve({
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown install error',
+      });
+    });
+
+    child.on('close', (code) => {
+      if (code === 0) {
+        resolve({ success: true });
+        return;
+      }
+
+      resolve({
+        success: false,
+        error: `npm exited with code ${code ?? 'unknown'}`,
+      });
+    });
+  });
+}
+
 function installLatest(
   packageName: string,
   currentVersion: string,
@@ -176,41 +244,29 @@ function installLatest(
     latestVersion: targetVersion,
   });
 
-  const child = spawn(
-    'npm',
-    ['install', '-g', `${packageName}@${targetVersion}`, '--silent', '--no-fund', '--no-audit'],
-    {
-      stdio: 'ignore',
-      detached: false,
+  void installVersion(packageName, targetVersion, { silent: true, stdio: 'ignore' }).then((result) => {
+    if (result.success) {
+      emitAutoUpdateEvent({
+        type: 'update-installed',
+        packageName,
+        currentVersion,
+        latestVersion: targetVersion,
+      });
+      return;
     }
-  );
-
-  child.on('error', (error) => {
     emitAutoUpdateEvent({
       type: 'update-install-failed',
       packageName,
       currentVersion,
       latestVersion: targetVersion,
-      error: error instanceof Error ? error.message : 'Unknown install error',
+      error: result.error,
     });
-  });
-
-  child.on('close', (code) => {
-    if (code !== 0) {
-      emitAutoUpdateEvent({
-        type: 'update-install-failed',
-        packageName,
-        currentVersion,
-        latestVersion: targetVersion,
-        error: `npm exited with code ${code ?? 'unknown'}`,
-      });
-    }
   });
 }
 
 async function checkAndUpdate(): Promise<void> {
   if (isChecking || !shouldAutoUpdate()) return;
-  const metadata = readPackageMetadata();
+  const metadata = getRuntimePackageMetadata();
   if (!metadata) return;
 
   isChecking = true;
@@ -264,7 +320,7 @@ async function checkAndUpdate(): Promise<void> {
 }
 
 export function startAutoUpdater(): () => void {
-  const metadata = readPackageMetadata();
+  const metadata = getRuntimePackageMetadata();
   if (!shouldAutoUpdate()) {
     if (metadata) {
       emitAutoUpdateEvent({
@@ -287,5 +343,58 @@ export function startAutoUpdater(): () => void {
       clearInterval(intervalHandle);
       intervalHandle = null;
     }
+  };
+}
+
+export async function updateCliFromNpm(): Promise<ManualUpdateResult> {
+  const metadata = getRuntimePackageMetadata();
+  if (!metadata) {
+    return {
+      status: 'failed',
+      message: 'Unable to read package metadata for update check.',
+    };
+  }
+
+  const latest = await fetchLatestVersion(metadata.name);
+  if (!latest) {
+    return {
+      status: 'failed',
+      packageName: metadata.name,
+      currentVersion: metadata.version,
+      message: 'Unable to reach npm registry to check for updates.',
+    };
+  }
+
+  if (compareVersions(latest, metadata.version) <= 0) {
+    return {
+      status: 'up-to-date',
+      packageName: metadata.name,
+      currentVersion: metadata.version,
+      latestVersion: latest,
+      message: `Already on the latest version (${metadata.version}).`,
+    };
+  }
+
+  const installResult = await installVersion(metadata.name, latest, {
+    silent: false,
+    stdio: 'inherit',
+  });
+
+  if (!installResult.success) {
+    return {
+      status: 'failed',
+      packageName: metadata.name,
+      currentVersion: metadata.version,
+      latestVersion: latest,
+      message: installResult.error || 'Failed to install latest version.',
+    };
+  }
+
+  return {
+    status: 'updated',
+    packageName: metadata.name,
+    currentVersion: metadata.version,
+    latestVersion: latest,
+    message: `Updated ${metadata.name} from ${metadata.version} to ${latest}.`,
   };
 }

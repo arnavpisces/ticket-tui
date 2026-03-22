@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Text, useInput, useStdout } from 'ink';
-import TextInput from 'ink-text-input';
+import TextInput from '../common/WordTextInput.js';
 import { ConfluencePage } from '../../api/confluence-client.js';
 import { ConfluenceConverter } from '../../formatters/confluence-converter.js';
 import { ShortcutHints } from '../common/ShortcutHints.js';

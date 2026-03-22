@@ -51,6 +51,23 @@ interface SgrMouseEvent {
 }
 
 const SGR_MOUSE_REGEX = /\x1b\[<(\d+);(\d+);(\d+)([Mm])/g;
+const WORD_CHAR_REGEX = /[A-Za-z0-9_]/;
+
+const isWordChar = (char: string): boolean => WORD_CHAR_REGEX.test(char);
+
+const moveWordLeft = (line: string, col: number): number => {
+    let next = Math.max(0, Math.min(col, line.length));
+    while (next > 0 && !isWordChar(line[next - 1])) next--;
+    while (next > 0 && isWordChar(line[next - 1])) next--;
+    return next;
+};
+
+const moveWordRight = (line: string, col: number): number => {
+    let next = Math.max(0, Math.min(col, line.length));
+    while (next < line.length && isWordChar(line[next])) next++;
+    while (next < line.length && !isWordChar(line[next])) next++;
+    return next;
+};
 
 export function EditableTextBox({
     content,
@@ -408,6 +425,50 @@ export function EditableTextBox({
                 row: Math.min(lines.length - 1, prev.row + 1),
                 col: Math.min(prev.col, lines[Math.min(lines.length - 1, prev.row + 1)]?.length || 0),
             }));
+            return;
+        }
+        const wordLeftShortcut = key.meta && (key.leftArrow || input.toLowerCase() === 'b');
+        if (wordLeftShortcut) {
+            setCursor(prev => {
+                let row = prev.row;
+                let col = prev.col;
+
+                while (row >= 0) {
+                    const line = lines[row] || '';
+                    const nextCol = moveWordLeft(line, col);
+                    if (nextCol !== col || row === 0) {
+                        return { row, col: nextCol };
+                    }
+                    row -= 1;
+                    if (row < 0) {
+                        return { row: 0, col: 0 };
+                    }
+                    col = (lines[row] || '').length;
+                }
+
+                return prev;
+            });
+            return;
+        }
+        const wordRightShortcut = key.meta && (key.rightArrow || input.toLowerCase() === 'f');
+        if (wordRightShortcut) {
+            setCursor(prev => {
+                let row = prev.row;
+                let col = prev.col;
+                const lastRow = lines.length - 1;
+
+                while (row <= lastRow) {
+                    const line = lines[row] || '';
+                    const nextCol = moveWordRight(line, col);
+                    if (nextCol !== col || row === lastRow) {
+                        return { row, col: nextCol };
+                    }
+                    row += 1;
+                    col = 0;
+                }
+
+                return prev;
+            });
             return;
         }
         if (key.leftArrow) {

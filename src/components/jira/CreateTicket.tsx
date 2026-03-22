@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Box, Text, useInput } from 'ink';
-import TextInput from 'ink-text-input';
+import TextInput from '../common/WordTextInput.js';
 import { FuzzySelect, FuzzySelectItem } from '../common/FuzzySelect.js';
 import { ShortcutHints } from '../common/ShortcutHints.js';
 import { JiraClient } from '../../api/jira-client.js';
@@ -10,6 +10,9 @@ interface CreateTicketProps {
     client: JiraClient;
     onCancel: () => void;
     onCreated: (issueKey: string) => void;
+    initialProjectKey?: string;
+    initialParentEpicKey?: string;
+    initialParentEpicLabel?: string;
 }
 
 type Step = 'project' | 'type' | 'parent' | 'priority' | 'summary' | 'description' | 'creating';
@@ -44,15 +47,24 @@ function getParentMode(issueTypeName: string): ParentMode {
     return 'epic-optional';
 }
 
-export function CreateTicket({ client, onCancel, onCreated }: CreateTicketProps) {
-    const [step, setStep] = useState<Step>('project');
+export function CreateTicket({
+    client,
+    onCancel,
+    onCreated,
+    initialProjectKey,
+    initialParentEpicKey,
+    initialParentEpicLabel
+}: CreateTicketProps) {
+    const [step, setStep] = useState<Step>(initialProjectKey ? 'type' : 'project');
     const [projects, setProjects] = useState<FuzzySelectItem[]>([]);
-    const [selectedProject, setSelectedProject] = useState<string | null>(null);
+    const [selectedProject, setSelectedProject] = useState<string | null>(initialProjectKey || null);
 
     const [issueTypes, setIssueTypes] = useState<FuzzySelectItem[]>([]);
     const [selectedType, setSelectedType] = useState<IssueTypeOption | null>(null);
     const [parentOptions, setParentOptions] = useState<FuzzySelectItem[]>([NO_PARENT_ITEM]);
-    const [selectedParent, setSelectedParent] = useState<string>(NO_PARENT);
+    const [selectedParent, setSelectedParent] = useState<string>(
+        initialParentEpicKey && initialProjectKey ? initialParentEpicKey : NO_PARENT
+    );
     const [priorities, setPriorities] = useState<FuzzySelectItem[]>([DEFAULT_PRIORITY_ITEM]);
     const [selectedPriority, setSelectedPriority] = useState<string>(DEFAULT_PRIORITY);
 
@@ -60,6 +72,11 @@ export function CreateTicket({ client, onCancel, onCreated }: CreateTicketProps)
     const [description, setDescription] = useState('');
 
     const [error, setError] = useState<string | null>(null);
+    const canUseInitialEpicParent = Boolean(
+        initialParentEpicKey &&
+        initialProjectKey &&
+        selectedProject === initialProjectKey
+    );
 
     // Fetch initial projects
     useEffect(() => {
@@ -135,14 +152,25 @@ export function CreateTicket({ client, onCancel, onCreated }: CreateTicketProps)
                     );
                 } else if (parentMode === 'epic-optional') {
                     const epicIssues = await client.searchEpics(selectedProject, '', 35);
-                    setParentOptions([
+                    const options = [
                         NO_PARENT_ITEM,
                         ...epicIssues.map(issue => ({
                             label: `${issue.key}: ${issue.fields.summary}`,
                             value: issue.key,
                             key: issue.key,
                         }))
-                    ]);
+                    ];
+                    if (
+                        canUseInitialEpicParent &&
+                        !options.some(option => option.value === initialParentEpicKey)
+                    ) {
+                        options.splice(1, 0, {
+                            label: initialParentEpicLabel || `${initialParentEpicKey}: Selected epic`,
+                            value: initialParentEpicKey!,
+                            key: initialParentEpicKey!,
+                        });
+                    }
+                    setParentOptions(options);
                 } else {
                     setParentOptions([NO_PARENT_ITEM]);
                 }
@@ -159,7 +187,7 @@ export function CreateTicket({ client, onCancel, onCreated }: CreateTicketProps)
         };
 
         fetchParentOptions();
-    }, [step, selectedProject, selectedType, client]);
+    }, [step, selectedProject, selectedType, client, canUseInitialEpicParent, initialParentEpicKey, initialParentEpicLabel]);
 
     const handleParentSearch = async (query: string): Promise<FuzzySelectItem[]> => {
         if (!selectedProject || !selectedType) {
@@ -254,6 +282,7 @@ export function CreateTicket({ client, onCancel, onCreated }: CreateTicketProps)
                     }}
                     onBack={onCancel}
                     placeholder="Select project..."
+                    clearQueryOnSelect
                 />
                 {error && <Text color="red">{error}</Text>}
             </Box>
@@ -271,13 +300,19 @@ export function CreateTicket({ client, onCancel, onCreated }: CreateTicketProps)
                         const issueType = val as IssueTypeOption;
                         setSelectedType(issueType);
                         const parentMode = getParentMode(issueType.name);
-                        setSelectedParent(NO_PARENT);
+                        const defaultParent =
+                            parentMode === 'epic-optional' && canUseInitialEpicParent
+                                ? initialParentEpicKey!
+                                : NO_PARENT;
+                        setSelectedParent(defaultParent);
                         if (parentMode === 'issue-required') {
                             setParentOptions([]);
                         } else {
                             setParentOptions([NO_PARENT_ITEM]);
                         }
                         if (parentMode === 'none') {
+                            setStep('priority');
+                        } else if (parentMode === 'epic-optional' && canUseInitialEpicParent) {
                             setStep('priority');
                         } else {
                             setStep('parent');
